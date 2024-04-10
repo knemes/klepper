@@ -1,2 +1,3 @@
 # klepper
-Rhinoceros 3D Kayak Builder
+
+A Kayak Design Plug-In For Rhinoceros 3D
