@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "6ZwCUPCU+CwYE0jXEV6BV2wubp5zJrtZNSz2XJHHFFLJVkb1B7fRHnQ4VKeT8K2Zo+rIUMfKrixhB8OQ/zbYNw==",
+  "success": true,
+  "projectFilePath": "C:\\dev\\klepper\\kayakbuilder\\kayakbuilder.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Keaton Nemes\\.nuget\\packages\\rhinocommon\\7.13.21348.13001\\rhinocommon.7.13.21348.13001.nupkg.sha512"
+  ],
+  "logs": []
+}
