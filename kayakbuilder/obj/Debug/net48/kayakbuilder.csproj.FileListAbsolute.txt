@@ -1,0 +1,9 @@
+C:\dev\klepper\kayakbuilder\bin\Debug\net48\kayakbuilder.rhp
+C:\dev\klepper\kayakbuilder\bin\Debug\net48\kayakbuilder.pdb
+C:\dev\klepper\kayakbuilder\obj\Debug\net48\kayakbuilder.csproj.AssemblyReference.cache
+C:\dev\klepper\kayakbuilder\obj\Debug\net48\kayakbuilder.GeneratedMSBuildEditorConfig.editorconfig
+C:\dev\klepper\kayakbuilder\obj\Debug\net48\kayakbuilder.AssemblyInfoInputs.cache
+C:\dev\klepper\kayakbuilder\obj\Debug\net48\kayakbuilder.AssemblyInfo.cs
+C:\dev\klepper\kayakbuilder\obj\Debug\net48\kayakbuilder.csproj.CoreCompileInputs.cache
+C:\dev\klepper\kayakbuilder\obj\Debug\net48\kayakbuilder.rhp
+C:\dev\klepper\kayakbuilder\obj\Debug\net48\kayakbuilder.pdb
