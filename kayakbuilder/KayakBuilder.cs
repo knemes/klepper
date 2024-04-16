@@ -8,9 +8,9 @@ using System.Collections.Generic;
 
 namespace kayakbuilder
 {
-    public class kayakbuilderCommand : Command
+    public class KayakBuilder : Command
     {
-        public kayakbuilderCommand()
+        public KayakBuilder()
         {
             // Rhino only creates one instance of each command class defined in a
             // plug-in, so it is safe to store a refence in a static property.
@@ -18,10 +18,10 @@ namespace kayakbuilder
         }
 
         ///<summary>The only instance of this command.</summary>
-        public static kayakbuilderCommand Instance { get; private set; }
+        public static KayakBuilder Instance { get; private set; }
 
         ///<returns>The command name as it appears on the Rhino command line.</returns>
-        public override string EnglishName => "kayakbuilderCommand";
+        public override string EnglishName => "KayakBuilder";
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
