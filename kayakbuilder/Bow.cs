@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace kayakbuilder
 {
-    internal class Class1
+    internal class Bow
     {
     }
 }

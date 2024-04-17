@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace kayakbuilder
 {
-    internal class Spine
+    internal class HullSection
     {
     }
 }

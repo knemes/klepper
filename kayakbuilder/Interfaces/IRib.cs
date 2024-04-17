@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace kayakbuilder.Interfaces
 {
-    internal interface Interface1
+    internal interface IRib
     {
     }
 }

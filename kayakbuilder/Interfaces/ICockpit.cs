@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace kayakbuilder.Interfaces
 {
-    internal interface IDeck
+    internal interface ICockpit
     {
     }
 }
