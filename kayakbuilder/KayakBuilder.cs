@@ -27,8 +27,15 @@ namespace kayakbuilder
         {
             //PARAMETRIC Boat Length
             Point3d origin = new Point3d(0, 0, 0);
-            Point3d klength = new Point3d(16, 0, 0);
-            doc.Objects.AddLine(origin, klength);
+            Point3d kpoint = new Point3d(16, 0, 0);
+            LineCurve klength = new LineCurve(origin, kpoint);
+
+            Stern stern = new Stern(5.5);
+
+            doc.Objects.AddCurve(klength);
+            doc.Objects.AddCurve(stern.sterncurve);
+
+            //doc.Objects.AddLine(origin, kpoint);
             doc.Views.Redraw();
             RhinoApp.WriteLine("The {0} command added one line to the document.", EnglishName);
 
