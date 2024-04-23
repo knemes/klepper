@@ -19,24 +19,21 @@ namespace kayakbuilder
         {
             //PARAMETRIC Boat Length
             Point3d spoint = new Point3d(0, 0, height);
-            Point3d spointB = new Point3d(length, 0, 0);
+            Point3d spointB = new Point3d(0, 0, -height);
             Vector3d svector = spointB - spoint;
 
 
             Point3d epoint = new Point3d(length, 0, 0);
-            Point3d epointB = new Point3d(-length, 0, height);
+            Point3d epointB = new Point3d(-length, 0,0);
             Vector3d evector = epoint - epointB;
 
             double ratio = 1;
 
-            sterncurve = Curve.CreateArcLineArcBlend(spoint, svector, epoint, evector, ratio);
-            Curve[] sterncurves = sterncurve.DuplicateSegments();
+            List<Point3d> points = new List<Point3d>();
+            points.Add(spoint);
+            points.Add(epoint);
 
-            double endparam = 1;
-            double startparam = 0;
-            BlendContinuity tangency = BlendContinuity.Tangency;
-
-            this.sterncurve = Curve.CreateBlendCurve(sterncurves[0], endparam, false, tangency, sterncurves[1], startparam, false, tangency);
+            this.sterncurve = Curve.CreateInterpolatedCurve(points, 3, CurveKnotStyle.UniformPeriodic, svector, evector);
         }
 
     }
