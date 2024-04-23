@@ -30,7 +30,7 @@ namespace kayakbuilder
             Point3d kpoint = new Point3d(16, 0, 0);
             LineCurve klength = new LineCurve(origin, kpoint);
 
-            Stern stern = new Stern(5.5);
+            Stern stern = new Stern(5.5, 9);
 
             doc.Objects.AddCurve(klength);
             doc.Objects.AddCurve(stern.sterncurve);
