@@ -29,16 +29,17 @@ namespace kayakbuilder
 
             int klength = 16 * 12;
             double slength = 6;
-            double blength = 12;
+            double blength = 20;
+            double hullheight = 8;
 
             //PARAMETRIC Boat Length
             Point3d origin = new Point3d(0, 0, 0);
             Point3d kpoint = new Point3d(klength, 0, 0);
             LineCurve centerline = new LineCurve(origin, kpoint);
 
-            Stern stern = new Stern(slength, 9, 1);
+            Stern stern = new Stern(slength, hullheight, 1);
 
-            Bow bow = new Bow(blength, 9, .1, 1);
+            Bow bow = new Bow(blength, hullheight, blength, hullheight);
             Vector3d bowtranslate = new Vector3d(klength - blength, 0, 0);
             bow.bowcurve.Translate(bowtranslate);
 

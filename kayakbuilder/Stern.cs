@@ -36,7 +36,7 @@ namespace kayakbuilder
 
             NurbsCurve stern = Curve.CreateInterpolatedCurve(points, 3, CurveKnotStyle.ChordSquareRoot, svector, evector).ToNurbsCurve();
             NurbsCurvePointList sternpnts = stern.Points;
-            RhinoApp.WriteLine(sternpnts.Count.ToString());
+            //RhinoApp.WriteLine(sternpnts.Count.ToString());
 
             //PARAMETRIC Control Point Weight
             sternpnts.SetWeight(1, weight);
