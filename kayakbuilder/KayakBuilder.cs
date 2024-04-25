@@ -39,7 +39,7 @@ namespace kayakbuilder
 
             Stern stern = new Stern(slength, hullheight, 1);
 
-            Bow bow = new Bow(blength, hullheight, blength, hullheight);
+            Bow bow = new Bow(blength, hullheight, blength/2, hullheight/2);
             Vector3d bowtranslate = new Vector3d(klength - blength, 0, 0);
             bow.bowcurve.Translate(bowtranslate);
 

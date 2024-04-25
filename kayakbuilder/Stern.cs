@@ -19,6 +19,7 @@ namespace kayakbuilder
 
         public Stern(double length, double height, double weight)
         {
+            //TODO Add Control Point Movement
             //PARAMETRIC Stern Height
             Point3d spoint = new Point3d(0, 0, height);
             Point3d spointB = new Point3d(0, 0, -height);
