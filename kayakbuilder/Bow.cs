@@ -42,6 +42,7 @@ namespace kayakbuilder
             Point3d vcpoint = new Point3d(length, 0, zcorner);
             bowpnts.SetPoint(2, vcpoint, 1);
 
+
             this.bowcurve = bow;
 
         }

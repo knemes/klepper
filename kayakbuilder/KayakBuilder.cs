@@ -31,6 +31,7 @@ namespace kayakbuilder
             double slength = 6;
             double blength = 20;
             double hullheight = 8;
+            double beam = 24;
 
             //PARAMETRIC Boat Length
             Point3d origin = new Point3d(0, 0, 0);
@@ -43,9 +44,17 @@ namespace kayakbuilder
             Vector3d bowtranslate = new Vector3d(klength - blength, 0, 0);
             bow.bowcurve.Translate(bowtranslate);
 
+            double splace = (klength / 4);
+            double xplace = (klength / 2) - 6;
+            double bplace = 3 * (klength / 4);
+            double sternwidth = beam / 2;
+            double bowwidth = (beam / 3);
+            Gunwale gunwale = new Gunwale(sternwidth, beam, bowwidth, splace, xplace, bplace, hullheight, new Point3d(0, 0, hullheight), new Point3d (klength, 0, hullheight));
+
             doc.Objects.AddCurve(centerline);
             doc.Objects.AddCurve(stern.sterncurve);
             doc.Objects.AddCurve(bow.bowcurve);
+            doc.Objects.AddCurve(gunwale.gunwalecurve);
 
             //doc.Objects.AddLine(origin, kpoint);
             doc.Views.Redraw();
