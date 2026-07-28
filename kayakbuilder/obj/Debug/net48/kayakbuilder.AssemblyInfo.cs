@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("Description of kayakbuilder")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0+22dfe5ec92e7890fe28307efee11a93f2901e2df")]
 [assembly: System.Reflection.AssemblyProductAttribute("kayakbuilder")]
 [assembly: System.Reflection.AssemblyTitleAttribute("kayakbuilder")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

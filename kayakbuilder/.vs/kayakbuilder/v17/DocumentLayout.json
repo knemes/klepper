@@ -1,0 +1,122 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\dev\\klepper\\kayakbuilder\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|c:\\dev\\klepper\\kayakbuilder\\kayakbuilderplugin.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|solutionrelative:kayakbuilderplugin.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|c:\\dev\\klepper\\kayakbuilder\\kayakbuilder.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|solutionrelative:kayakbuilder.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|c:\\dev\\klepper\\kayakbuilder\\gunwale.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|solutionrelative:gunwale.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|c:\\dev\\klepper\\kayakbuilder\\bow.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|solutionrelative:bow.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|c:\\dev\\klepper\\kayakbuilder\\stern.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|solutionrelative:stern.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|c:\\dev\\klepper\\kayakbuilder\\hullsection.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{26B140DF-492A-4367-97FE-E1CA3424F55D}|kayakbuilder.csproj|solutionrelative:hullsection.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "KayakBuilderPlugin.cs",
+              "DocumentMoniker": "C:\\dev\\klepper\\kayakbuilder\\KayakBuilderPlugin.cs",
+              "RelativeDocumentMoniker": "KayakBuilderPlugin.cs",
+              "ToolTip": "C:\\dev\\klepper\\kayakbuilder\\KayakBuilderPlugin.cs",
+              "RelativeToolTip": "KayakBuilderPlugin.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-04-17T02:05:26.485Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "KayakBuilder.cs",
+              "DocumentMoniker": "C:\\dev\\klepper\\kayakbuilder\\KayakBuilder.cs",
+              "RelativeDocumentMoniker": "KayakBuilder.cs",
+              "ToolTip": "C:\\dev\\klepper\\kayakbuilder\\KayakBuilder.cs*",
+              "RelativeToolTip": "KayakBuilder.cs*",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAADQAAAAMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-04-17T01:25:34.895Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "Stern.cs",
+              "DocumentMoniker": "C:\\dev\\klepper\\kayakbuilder\\Stern.cs",
+              "RelativeDocumentMoniker": "Stern.cs",
+              "ToolTip": "C:\\dev\\klepper\\kayakbuilder\\Stern.cs",
+              "RelativeToolTip": "Stern.cs",
+              "ViewState": "AQIAABYAAAAAAAAAAAAgwCwAAAAkAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-04-17T02:04:37.827Z",
+              "IsPinned": true
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Bow.cs",
+              "DocumentMoniker": "C:\\dev\\klepper\\kayakbuilder\\Bow.cs",
+              "RelativeDocumentMoniker": "Bow.cs",
+              "ToolTip": "C:\\dev\\klepper\\kayakbuilder\\Bow.cs",
+              "RelativeToolTip": "Bow.cs",
+              "ViewState": "AQIAABYAAAAAAAAAAAAgwCwAAAAAAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-04-24T01:18:54.308Z",
+              "IsPinned": true
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Gunwale.cs",
+              "DocumentMoniker": "C:\\dev\\klepper\\kayakbuilder\\Gunwale.cs",
+              "RelativeDocumentMoniker": "Gunwale.cs",
+              "ToolTip": "C:\\dev\\klepper\\kayakbuilder\\Gunwale.cs",
+              "RelativeToolTip": "Gunwale.cs",
+              "ViewState": "AQIAACUAAAAAAAAAAAAgwDgAAAAfAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-04-30T01:44:42.256Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "HullSection.cs",
+              "DocumentMoniker": "C:\\dev\\klepper\\kayakbuilder\\HullSection.cs",
+              "RelativeDocumentMoniker": "HullSection.cs",
+              "ToolTip": "C:\\dev\\klepper\\kayakbuilder\\HullSection.cs",
+              "RelativeToolTip": "HullSection.cs",
+              "ViewState": "AQIAAAAAAAAAAAAAAAAAAAgAAAAeAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2024-04-17T02:05:46.559Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

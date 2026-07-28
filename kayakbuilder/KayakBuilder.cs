@@ -47,8 +47,8 @@ namespace kayakbuilder
             double splace = (klength / 4);
             double xplace = (klength / 2) - 6;
             double bplace = 3 * (klength / 4);
-            double sternwidth = beam / 2;
-            double bowwidth = (beam / 3);
+            double sternwidth = beam / 1.5;
+            double bowwidth = (beam / 2);
             Gunwale gunwale = new Gunwale(sternwidth, beam, bowwidth, splace, xplace, bplace, hullheight, new Point3d(0, 0, hullheight), new Point3d (klength, 0, hullheight));
 
             doc.Objects.AddCurve(centerline);
