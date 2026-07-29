@@ -1,28 +1,23 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { 
-  type KayakParameters, 
-  generateHullMesh, 
-  generateDeckMesh, 
-  generateRibStations,
-  getDeckZ,
-  getRibStation 
-} from "../kayakGeometry";
+import type { KayakParameters } from "../kayakGeometry/types";
+import { KayakBuilder } from "../kayakGeometry/KayakBuilder";
 
 interface ThreeViewportProps {
   params: KayakParameters;
+  builder: KayakBuilder;
   viewMode: "perspective" | "plan" | "side";
   showPhysics: boolean;
   showRibs: boolean;
   showStrips: boolean;
   showDimensions: boolean;
   draft: number;
-  vcb: number; // Vertical center of buoyancy
-  lcb: number; // Longitudinal center of buoyancy
+  vcb: number;
+  lcb: number;
 }
 
-// Canvas-based Sprite Text Helper for CAD dimensions
+// Technical Sprite Text for CAD dimensions
 function createTextSprite(text: string, colorStr = "#14231a", fontSize = 24): THREE.Sprite {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
@@ -30,8 +25,6 @@ function createTextSprite(text: string, colorStr = "#14231a", fontSize = 24): TH
   const ctx = canvas.getContext("2d");
   if (ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Technical CAD font
     ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
     ctx.fillStyle = colorStr;
     ctx.textAlign = "center";
@@ -42,12 +35,13 @@ function createTextSprite(text: string, colorStr = "#14231a", fontSize = 24): TH
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(16, 4, 1); // Aspect ratio matches canvas (256/64 = 4)
+  sprite.scale.set(16, 4, 1);
   return sprite;
 }
 
 export default function ThreeViewport({
   params,
+  builder,
   viewMode,
   showPhysics,
   showRibs,
@@ -59,7 +53,6 @@ export default function ThreeViewport({
 }: ThreeViewportProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   
-  // Keep values in refs to avoid re-initializing the whole Three.js scene on every parameter slider move
   const paramsRef = useRef(params);
   paramsRef.current = params;
   const draftRef = useRef(draft);
@@ -91,6 +84,9 @@ export default function ThreeViewport({
   // Group holds all dynamic kayak geometries
   const kayakGroupRef = useRef<THREE.Group>(new THREE.Group());
 
+  const sternSpriteRef = useRef<THREE.Sprite | null>(null);
+  const bowSpriteRef = useRef<THREE.Sprite | null>(null);
+
   useEffect(() => {
     if (!mountRef.current) return;
 
@@ -98,55 +94,46 @@ export default function ThreeViewport({
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xeae7df); // Driftwood tan CAD background
     sceneRef.current = scene;
-
-    // Add subtle fog matching background
-    scene.fog = new THREE.FogExp2(0xeae7df, 0.002);
+    scene.fog = new THREE.FogExp2(0xeae7df, 0.0015);
 
     // 2. Setup Cameras
-    const initialWidth = mountRef.current.clientWidth || 800;
-    const initialHeight = mountRef.current.clientHeight || 500;
+    const w = mountRef.current.clientWidth || 800;
+    const h = mountRef.current.clientHeight || 500;
 
-    const pCamera = new THREE.PerspectiveCamera(40, initialWidth / initialHeight, 1, 1000);
-    pCamera.position.set(120, 80, 160);
+    const pCamera = new THREE.PerspectiveCamera(38, w / h, 1, 1000);
+    pCamera.position.set(130, 75, 150);
     pCameraRef.current = pCamera;
 
-    const oCamera = new THREE.OrthographicCamera(
-      initialWidth / -4,
-      initialWidth / 4,
-      initialHeight / 4,
-      initialHeight / -4,
-      1,
-      1000
-    );
-    oCamera.position.set(0, 150, 0); // Looking down
+    const oCamera = new THREE.OrthographicCamera(w / -4, w / 4, h / 4, h / -4, 1, 1000);
+    oCamera.position.set(0, 150, 0);
     oCameraRef.current = oCamera;
 
     // 3. Setup Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(initialWidth, initialHeight);
+    renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     mountRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Setup ResizeObserver to dynamically resize the canvas to its container size
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const w = entry.contentRect.width || mountRef.current?.clientWidth || 800;
-        const h = entry.contentRect.height || mountRef.current?.clientHeight || 500;
+        const widthVal = entry.contentRect.width || mountRef.current?.clientWidth || 800;
+        const heightVal = entry.contentRect.height || mountRef.current?.clientHeight || 500;
 
         if (rendererRef.current) {
-          renderer.setSize(w, h);
+          renderer.setSize(widthVal, heightVal);
         }
         if (pCameraRef.current) {
-          pCamera.aspect = w / h;
+          pCamera.aspect = widthVal / heightVal;
           pCamera.updateProjectionMatrix();
         }
         if (oCameraRef.current) {
-          oCamera.left = w / -4;
-          oCamera.right = w / 4;
-          oCamera.top = h / 4;
-          oCamera.bottom = h / -4;
+          oCamera.left = widthVal / -4;
+          oCamera.right = widthVal / 4;
+          oCamera.top = heightVal / 4;
+          oCamera.bottom = heightVal / -4;
           oCamera.updateProjectionMatrix();
         }
       }
@@ -160,68 +147,87 @@ export default function ThreeViewport({
     const controls = new OrbitControls(pCamera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2 + 0.1; // Don't orbit fully under ground
+    controls.maxPolarAngle = Math.PI / 2 + 0.05;
     controls.minDistance = 20;
-    controls.maxDistance = 400;
+    controls.maxDistance = 450;
     controlsRef.current = controls;
 
-    // 5. Add Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // 5. Add Lights (Rhino Shaded Mode emulation with key light and fill light)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(100, 150, 50);
-    dirLight.castShadow = true;
-    scene.add(dirLight);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.75);
+    keyLight.position.set(80, 160, 60);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048;
+    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.bias = -0.001;
+    scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
-    fillLight.position.set(-100, 50, -50);
+    const fillLight = new THREE.DirectionalLight(0xfff5ea, 0.35);
+    fillLight.position.set(-80, 60, -60);
     scene.add(fillLight);
 
-    // Grid Floor
-    const gridHelper = new THREE.GridHelper(300, 30, 0x888888, 0xdddddd);
-    gridHelper.position.y = -1; // place slightly below keel
+    const rimLight = new THREE.DirectionalLight(0xe0f0ff, 0.25);
+    rimLight.position.set(0, -50, 0);
+    scene.add(rimLight);
+
+    // Dynamic grid floor (CAD style)
+    const gridHelper = new THREE.GridHelper(300, 30, 0x76827a, 0xc1c7c2);
+    gridHelper.position.y = -1.5;
     scene.add(gridHelper);
+
+    // Rhino style axis indicator
+    const axesHelper = new THREE.AxesHelper(15);
+    axesHelper.position.set(-150, -1.0, -40);
+    scene.add(axesHelper);
+
+    // Add Bow and Stern annotation sprites
+    const sternSprite = createTextSprite("STERN", "#ff5555", 28);
+    sternSprite.scale.set(16, 4, 1);
+    scene.add(sternSprite);
+    sternSpriteRef.current = sternSprite;
+
+    const bowSprite = createTextSprite("BOW", "#33a3ff", 28);
+    bowSprite.scale.set(16, 4, 1);
+    scene.add(bowSprite);
+    bowSpriteRef.current = bowSprite;
 
     // Add Kayak geometries group
     scene.add(kayakGroupRef.current);
 
-    // Initial render trigger
+    // Rebuild mesh initially
     updateKayakGeometries();
 
     // 6. Animation Loop
     let animationId: number;
     const animate = () => {
       animationId = requestAnimationFrame(animate);
+      const activeCamera = viewModeRef.current === "perspective" ? pCamera : oCamera;
 
-      const activeCamera = viewModeRef.current === "perspective" ? pCameraRef.current : oCameraRef.current;
-      
-      if (viewModeRef.current === "perspective" && controlsRef.current) {
-        controlsRef.current.update();
+      if (viewModeRef.current === "perspective") {
+        controls.update();
       }
 
-      if (rendererRef.current && activeCamera && sceneRef.current) {
-        rendererRef.current.render(sceneRef.current, activeCamera);
-      }
+      renderer.render(scene, activeCamera);
     };
     animate();
 
-    // 7. Handle Resize
     const handleResize = () => {
-      if (!mountRef.current || !rendererRef.current || !pCameraRef.current || !oCameraRef.current) return;
-      const w = mountRef.current.clientWidth;
-      const h = mountRef.current.clientHeight;
+      if (!mountRef.current || !rendererRef.current) return;
+      const widthVal = mountRef.current.clientWidth;
+      const heightVal = mountRef.current.clientHeight;
 
-      pCameraRef.current.aspect = w / h;
-      pCameraRef.current.updateProjectionMatrix();
+      pCamera.aspect = widthVal / heightVal;
+      pCamera.updateProjectionMatrix();
 
-      oCameraRef.current.left = w / -4;
-      oCameraRef.current.right = w / 4;
-      oCameraRef.current.top = h / 4;
-      oCameraRef.current.bottom = h / -4;
-      oCameraRef.current.updateProjectionMatrix();
+      oCamera.left = widthVal / -4;
+      oCamera.right = widthVal / 4;
+      oCamera.top = heightVal / 4;
+      oCamera.bottom = heightVal / -4;
+      oCamera.updateProjectionMatrix();
 
-      rendererRef.current.setSize(w, h);
+      rendererRef.current.setSize(widthVal, heightVal);
     };
     window.addEventListener("resize", handleResize);
 
@@ -238,28 +244,25 @@ export default function ThreeViewport({
 
   // Handle camera switching
   useEffect(() => {
-    if (!controlsRef.current || !pCameraRef.current || !oCameraRef.current || !mountRef.current) return;
+    if (!controlsRef.current || !pCameraRef.current || !oCameraRef.current) return;
 
     if (viewMode === "plan") {
-      // Top down
-      oCameraRef.current.position.set(0, 120, 0);
+      oCameraRef.current.position.set(0, 160, 0);
       oCameraRef.current.lookAt(0, 0, 0);
-      oCameraRef.current.zoom = 2.2;
+      oCameraRef.current.zoom = 2.4;
       oCameraRef.current.updateProjectionMatrix();
     } else if (viewMode === "side") {
-      // Profile side view
-      oCameraRef.current.position.set(0, 0, 120);
+      oCameraRef.current.position.set(0, 0, 160);
       oCameraRef.current.lookAt(0, 0, 0);
-      oCameraRef.current.zoom = 2.2;
+      oCameraRef.current.zoom = 2.4;
       oCameraRef.current.updateProjectionMatrix();
     } else {
-      // Perspective Orbiting
       controlsRef.current.target.set(0, params.hullHeight / 3, 0);
       controlsRef.current.update();
     }
   }, [viewMode, params.length, params.hullHeight]);
 
-  // Trigger geometry rebuilds when parameters or overlays change
+  // Re-render geometries when parameters or overlay selectors change
   useEffect(() => {
     updateKayakGeometries();
   }, [params, showPhysics, showRibs, showStrips, showDimensions, draft, vcb, lcb]);
@@ -270,47 +273,53 @@ export default function ThreeViewport({
 
     // Clear old children
     while (group.children.length > 0) {
-      const child = group.children[0];
-      group.remove(child);
+      group.remove(group.children[0]);
     }
 
     const currentParams = paramsRef.current;
     const L = currentParams.length * 12;
     const halfL = L / 2;
 
-    // Materials
-    // Elegant forest green hull material with subtle wireframe overlay
+    // Position Bow and Stern annotations off the tips of the kayak
+    if (sternSpriteRef.current) {
+      sternSpriteRef.current.position.set(-halfL - 10, -1.0, 0);
+    }
+    if (bowSpriteRef.current) {
+      bowSpriteRef.current.position.set(halfL + 10, -1.0, 0);
+    }
+
+    // Elegant materials reflecting premium Rhino-shaded CAD mode
     const hullMaterial = new THREE.MeshStandardMaterial({
-      color: 0x2c4a3e, // Moss leaf green
-      roughness: 0.15,
-      metalness: 0.1,
+      color: 0x1f362c,      // Shaded dark forest green
+      roughness: 0.22,
+      metalness: 0.12,
       side: THREE.DoubleSide,
       flatShading: false,
     });
 
     const deckMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8fbc8f, // Sage meadow green
-      roughness: 0.3,
-      metalness: 0.05,
+      color: 0x7b9c7b,      // Premium sage deck green
+      roughness: 0.35,
+      metalness: 0.08,
       side: THREE.DoubleSide,
     });
 
-    const ribMaterial = new THREE.LineBasicMaterial({
-      color: 0x14231a, // Pine shadow (dark green/black) for high contrast on tan
-      linewidth: 2,
+    const technicalLineMaterial = new THREE.LineBasicMaterial({
+      color: 0x14231a,      // Dark pine shadow outline
+      linewidth: 1.5,
+      transparent: true,
+      opacity: 0.85
     });
 
-    // 1. Generate Hull Mesh
-    const hullData = generateHullMesh(currentParams);
+    // 1. Generate and Shift Hull Mesh
+    const hullData = builder.generateHullMesh();
     const hullGeo = new THREE.BufferGeometry();
     hullGeo.setAttribute("position", new THREE.BufferAttribute(hullData.vertices, 3));
-    hullGeo.setAttribute("uv", new THREE.BufferAttribute(hullData.uvs, 1));
-    
-    // Shift mesh vertices to center the boat in the view
+    hullGeo.setAttribute("uv", new THREE.BufferAttribute(hullData.uvs, 2));
+
     const posAttr = hullGeo.attributes.position;
     for (let i = 0; i < posAttr.count; i++) {
-      const x = posAttr.getX(i);
-      posAttr.setX(i, x - halfL); // shift so center is X=0
+      posAttr.setX(i, posAttr.getX(i) - halfL); // shift center to X=0
     }
     hullGeo.setIndex(new THREE.BufferAttribute(hullData.indices, 1));
     hullGeo.computeVertexNormals();
@@ -320,16 +329,15 @@ export default function ThreeViewport({
     hullMesh.receiveShadow = true;
     group.add(hullMesh);
 
-    // 2. Generate Deck Mesh
-    const deckData = generateDeckMesh(currentParams);
+    // 2. Generate and Shift Deck Mesh
+    const deckData = builder.generateDeckMesh();
     const deckGeo = new THREE.BufferGeometry();
     deckGeo.setAttribute("position", new THREE.BufferAttribute(deckData.vertices, 3));
-    deckGeo.setAttribute("uv", new THREE.BufferAttribute(deckData.uvs, 1));
-    
+    deckGeo.setAttribute("uv", new THREE.BufferAttribute(deckData.uvs, 2));
+
     const dPosAttr = deckGeo.attributes.position;
     for (let i = 0; i < dPosAttr.count; i++) {
-      const x = dPosAttr.getX(i);
-      dPosAttr.setX(i, x - halfL);
+      dPosAttr.setX(i, dPosAttr.getX(i) - halfL);
     }
     deckGeo.setIndex(new THREE.BufferAttribute(deckData.indices, 1));
     deckGeo.computeVertexNormals();
@@ -339,174 +347,125 @@ export default function ThreeViewport({
     deckMesh.receiveShadow = true;
     group.add(deckMesh);
 
-    // 2b. Generate Cockpit Coaming Rim (Extruded along Tapered Deck Facet Normal)
-    const facetStartX = currentParams.deckLongitudinalPeak * L;
-    const activeCpStart = Math.min(currentParams.cockpitStart, facetStartX - 1.0 - currentParams.cockpitLength);
-    const cpStart = activeCpStart;
-    const cpLength = currentParams.cockpitLength;
-    const cpWidth = currentParams.cockpitWidth;
-    const cpCenterX = cpStart + cpLength / 2;
-    
-    const N = 40;
-    const coamingVertices: number[] = [];
-    const coamingIndices: number[] = [];
-    
-    const sternDeckZ = getDeckZ(0, currentParams);
-    const peakDeckZ = currentParams.totalHeight;
-    const getPlaneZ = (xVal: number) => {
-      return sternDeckZ + (peakDeckZ - sternDeckZ) * (xVal / (facetStartX || 1));
+    // 3. Generate Cockpit Coaming Rim
+    const sternDeckZ = builder.sternDeckZ;
+
+    const getGunwaleAndDeckHeight = (xVal: number) => {
+      const gunLeft = builder.gunwale.getLeftPointAtX(xVal);
+      const dPt = builder.deckLine.getPointAtX(xVal);
+      return {
+        gunwaleY: Math.abs(gunLeft.y),
+        gunwaleZ: gunLeft.z,
+        deckZ: dPt.z
+      };
     };
 
-    // Calculate normal vector of the tilted deck facet plane in XZ (tx, ty)
-    const dx = facetStartX - 0;
-    const dyPlane = peakDeckZ - sternDeckZ; // height change
-    const planeLen = Math.sqrt(dx * dx + dyPlane * dyPlane);
-    // Normal vector pointing perpendicular/upwards from sloping plane:
-    const nx = -dyPlane / (planeLen || 1);
-    const ny = dx / (planeLen || 1);
+    const coamingData = builder.cockpit.generateCoamingMesh(
+      currentParams,
+      sternDeckZ,
+      builder.slope,
+      builder.facetStartX,
+      halfL,
+      getGunwaleAndDeckHeight
+    );
 
-    const coamingHeight = currentParams.coamingHeight !== undefined ? currentParams.coamingHeight : 0.75;
-    
-    const pPower = 1.0 + currentParams.deckVerticalCurvature * 2.2;
-    
-    for (let i = 0; i < N; i++) {
-      const angle = (i / N) * Math.PI * 2;
-      const xc = (cpLength / 2) * Math.cos(angle);
-      const yc = (cpWidth / 2) * Math.sin(angle);
-      
-      const xVal = cpCenterX + xc;
-      const zVal = getPlaneZ(xVal); // Sloping flat deck plane height
-      
-      // Retrieve natural rib dimensions at this longitudinal position
-      const station = getRibStation(xVal, currentParams);
-      const gY = Math.abs(station.gunwaleLeft.y);
-      const gZ = station.gunwaleLeft.z;
-      const dZ_center = station.deckPt.z;
-      
-      // Calculate natural flat facet width and cap cockpit to naturalFacetY - 1.0 inch
-      const yPctInt = Math.max(0, Math.min(1, (dZ_center - zVal) / (dZ_center - gZ || 1)));
-      const naturalFacetY = Math.pow(yPctInt, 1 / pPower) * gY;
-      const maxAllowedHalfWidth = Math.max(1.0, naturalFacetY - 1.0);
-      const activeYc = Math.min(Math.abs(yc), maxAllowedHalfWidth) * Math.sign(yc);
-
-      // Bottom point on the deck (Three.js coordinates: X=length, Y=height, Z=width)
-      const tx = xVal - halfL;
-      const ty = zVal;
-      const tz = activeYc;
-      
-      // Top point extruded along the facet normal (nx, ny, 0)
-      const txTop = tx + coamingHeight * nx;
-      const tyTop = ty + coamingHeight * ny;
-      const tzTop = tz; // no lateral tilt
-      
-      // Bottom vertex
-      coamingVertices.push(tx, ty, tz);
-      // Top vertex
-      coamingVertices.push(txTop, tyTop, tzTop);
-    }
-    
-    // Connect coaming loop with triangles
-    for (let i = 0; i < N; i++) {
-      const b1 = i * 2;
-      const t1 = b1 + 1;
-      const b2 = ((i + 1) % N) * 2;
-      const t2 = b2 + 1;
-      
-      // Triangle 1: bottom1 -> bottom2 -> top1
-      coamingIndices.push(b1, b2, t1);
-      // Triangle 2: bottom2 -> top2 -> top1
-      coamingIndices.push(b2, t2, t1);
-    }
-    
     const coamingGeo = new THREE.BufferGeometry();
-    coamingGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(coamingVertices), 3));
-    coamingGeo.setIndex(new THREE.BufferAttribute(new Uint32Array(coamingIndices), 1));
+    coamingGeo.setAttribute("position", new THREE.BufferAttribute(coamingData.vertices, 3));
+    coamingGeo.setIndex(new THREE.BufferAttribute(coamingData.indices, 1));
     coamingGeo.computeVertexNormals();
-    
+
     const coamingMaterial = new THREE.MeshStandardMaterial({
-      color: 0x3d2314, // Deep rich mahogany wood color
-      roughness: 0.25,
+      color: 0x3d2314, // Rich mahogany
+      roughness: 0.28,
       metalness: 0.1,
       side: THREE.DoubleSide
     });
-    
+
     const coamingMesh = new THREE.Mesh(coamingGeo, coamingMaterial);
     coamingMesh.castShadow = true;
     coamingMesh.receiveShadow = true;
     group.add(coamingMesh);
 
-    // 3. Render Cedar Strips (Procedural Longitudinal Lines)
-    if (showStripsRef.current) {
-      const stripLinesCount = 14;
-      const uSegments = 50;
-      const stripMaterial = new THREE.LineBasicMaterial({
-        color: 0x8b5a2b, // Sienna wood brown for high contrast on green hull
-        opacity: 0.4,
-        transparent: true,
+    // 4. Draw CAD Style Outlines (Rhino Edge outlines)
+    // Keel profile curve outline
+    const keelPoints: THREE.Vector3[] = [];
+    const keelDivs = 60;
+    for (let i = 0; i <= keelDivs; i++) {
+      const x = (i / keelDivs) * L;
+      const pt = builder.keel.getPointAtX(x);
+      keelPoints.push(new THREE.Vector3(pt.x - halfL, pt.z, pt.y));
+    }
+    const keelLineGeo = new THREE.BufferGeometry().setFromPoints(keelPoints);
+    const keelLine = new THREE.Line(keelLineGeo, technicalLineMaterial);
+    group.add(keelLine);
+
+    // Gunwale left outline
+    const gLeftPoints: THREE.Vector3[] = [];
+    for (let i = 0; i <= keelDivs; i++) {
+      const x = (i / keelDivs) * L;
+      const pt = builder.gunwale.getLeftPointAtX(x);
+      gLeftPoints.push(new THREE.Vector3(pt.x - halfL, pt.z, pt.y));
+    }
+    const glGeo = new THREE.BufferGeometry().setFromPoints(gLeftPoints);
+    const glLine = new THREE.Line(glGeo, technicalLineMaterial);
+    group.add(glLine);
+
+    // Gunwale right outline
+    const gRightPoints: THREE.Vector3[] = [];
+    for (let i = 0; i <= keelDivs; i++) {
+      const x = (i / keelDivs) * L;
+      const pt = builder.gunwale.getRightPointAtX(x);
+      gRightPoints.push(new THREE.Vector3(pt.x - halfL, pt.z, pt.y));
+    }
+    const grGeo = new THREE.BufferGeometry().setFromPoints(gRightPoints);
+    const grLine = new THREE.Line(grGeo, technicalLineMaterial);
+    group.add(grLine);
+
+    // Deck Centerline outline
+    const deckCenterPoints: THREE.Vector3[] = [];
+    for (let i = 0; i <= keelDivs; i++) {
+      const x = (i / keelDivs) * L;
+      const pt = builder.deckLine.getPointAtX(x);
+      deckCenterPoints.push(new THREE.Vector3(pt.x - halfL, pt.z, pt.y));
+    }
+    const dcGeo = new THREE.BufferGeometry().setFromPoints(deckCenterPoints);
+    const dcLine = new THREE.Line(dcGeo, technicalLineMaterial);
+    group.add(dcLine);
+
+    // 5. Render Plywood Stations/Ribs
+    if (showRibsRef.current) {
+      const stations = builder.generateStations(0);
+      const ribMaterial = new THREE.LineBasicMaterial({
+        color: 0x14231a,
+        linewidth: 2,
       });
 
-      // We extract longitudinal lines by tracing constant V values in the hull mesh
-      for (let s = 1; s < stripLinesCount; s++) {
-        // vPct represents the girth slice percentage
-        const vPct = s / stripLinesCount;
-        const linePoints: THREE.Vector3[] = [];
-
-        // Alternative direct mesh extraction (simpler and runs fast)
-        const verticesPerRow = 21; // vSegments + 1
-        for (let u = 0; u <= uSegments; u++) {
-          // Map slider percentage to actual vertex coordinate
-          const vIdx = Math.floor(vPct * 20);
-          const baseIndex = (u * verticesPerRow + vIdx) * 3;
-          const vx = hullData.vertices[baseIndex] - halfL;
-          const vy = hullData.vertices[baseIndex + 1];
-          const vz = hullData.vertices[baseIndex + 2];
-          linePoints.push(new THREE.Vector3(vx, vy, vz));
-        }
-
-        const stripGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
-        const stripLine = new THREE.Line(stripGeo, stripMaterial);
-        group.add(stripLine);
-      }
-    }
-
-    // 4. Render Transverse Ribs (Forms / Frames)
-    if (showRibsRef.current) {
-      const stations = generateRibStations(currentParams, 0);
       stations.forEach((st) => {
         const xOffset = st.x - halfL;
 
-        // Draw Left Hull curve
-        const hullLeftPts = st.hullCurveLeft.map(p => new THREE.Vector3(xOffset, p.z, p.y));
-        const hlGeo = new THREE.BufferGeometry().setFromPoints(hullLeftPts);
-        const hlLine = new THREE.Line(hlGeo, ribMaterial);
-        group.add(hlLine);
+        // Hull curve lines
+        const hlPts = st.hullCurveLeft.map(p => new THREE.Vector3(xOffset, p.z, p.y));
+        const hlGeo = new THREE.BufferGeometry().setFromPoints(hlPts);
+        group.add(new THREE.Line(hlGeo, ribMaterial));
 
-        // Draw Right Hull curve
-        const hullRightPts = st.hullCurveRight.map(p => new THREE.Vector3(xOffset, p.z, p.y));
-        const hrGeo = new THREE.BufferGeometry().setFromPoints(hullRightPts);
-        const hrLine = new THREE.Line(hrGeo, ribMaterial);
-        group.add(hrLine);
+        const hrPts = st.hullCurveRight.map(p => new THREE.Vector3(xOffset, p.z, p.y));
+        const hrGeo = new THREE.BufferGeometry().setFromPoints(hrPts);
+        group.add(new THREE.Line(hrGeo, ribMaterial));
 
-        // Draw Left Deck curve
-        const deckLeftPts = st.deckCurveLeft.map(p => new THREE.Vector3(xOffset, p.z, p.y));
-        const dlGeo = new THREE.BufferGeometry().setFromPoints(deckLeftPts);
-        const dlLine = new THREE.Line(dlGeo, ribMaterial);
-        group.add(dlLine);
+        // Deck curve lines
+        const dlPts = st.deckCurveLeft.map(p => new THREE.Vector3(xOffset, p.z, p.y));
+        const dlGeo = new THREE.BufferGeometry().setFromPoints(dlPts);
+        group.add(new THREE.Line(dlGeo, ribMaterial));
 
-        // Draw Right Deck curve
-        const deckRightPts = st.deckCurveRight.map(p => new THREE.Vector3(xOffset, p.z, p.y));
-        const drGeo = new THREE.BufferGeometry().setFromPoints(deckRightPts);
-        const drLine = new THREE.Line(drGeo, ribMaterial);
-        group.add(drLine);
+        const drPts = st.deckCurveRight.map(p => new THREE.Vector3(xOffset, p.z, p.y));
+        const drGeo = new THREE.BufferGeometry().setFromPoints(drPts);
+        group.add(new THREE.Line(drGeo, ribMaterial));
 
-        // Add visual thickness to ribs (a 3D wireframe outline to make them look like 3/4" plywood)
-        // Offset in X by +/- 0.375" (half of 3/4")
+        // Plywood volume bounds visual helper
         const pt = currentParams.plywoodThickness;
         const offsets = [-pt / 2, pt / 2];
         offsets.forEach(off => {
           const xOffOff = xOffset + off;
-          
-          // Connect keel to gunwale
           const plyPoints = [
             new THREE.Vector3(xOffOff, st.keelPt.z, st.keelPt.y),
             new THREE.Vector3(xOffOff, st.gunwaleLeft.z, st.gunwaleLeft.y),
@@ -515,42 +474,69 @@ export default function ThreeViewport({
             new THREE.Vector3(xOffOff, st.keelPt.z, st.keelPt.y)
           ];
           const plyGeo = new THREE.BufferGeometry().setFromPoints(plyPoints);
-          const plyLine = new THREE.Line(plyGeo, new THREE.LineBasicMaterial({ color: 0x8fbc8f, opacity: 0.3, transparent: true }));
-          group.add(plyLine);
+          group.add(new THREE.Line(plyGeo, new THREE.LineBasicMaterial({ color: 0x8fbc8f, opacity: 0.25, transparent: true })));
         });
       });
     }
 
-    // 5. Physics Overlays
+    // 6. Render Cedar Planking Strips
+    if (showStripsRef.current) {
+      const stripLinesCount = 14;
+      const uSegments = 50;
+      const vSegments = 20;
+      const stripMaterial = new THREE.LineBasicMaterial({
+        color: 0x9c5e31, // Rich wood brown
+        opacity: 0.45,
+        transparent: true,
+      });
+
+      const verticesPerRow = vSegments + 1;
+      for (let s = 1; s < stripLinesCount; s++) {
+        const vPct = s / stripLinesCount;
+        const linePoints: THREE.Vector3[] = [];
+
+        for (let u = 0; u <= uSegments; u++) {
+          const vIdx = Math.floor(vPct * vSegments);
+          const baseIndex = (u * verticesPerRow + vIdx) * 3;
+          const vx = hullData.vertices[baseIndex] - halfL;
+          const vy = hullData.vertices[baseIndex + 1];
+          const vz = hullData.vertices[baseIndex + 2];
+          linePoints.push(new THREE.Vector3(vx, vy, vz));
+        }
+
+        const stripGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
+        group.add(new THREE.Line(stripGeo, stripMaterial));
+      }
+    }
+
+    // 7. Physics Overlays
     if (showPhysicsRef.current) {
       const activeDraft = draftRef.current;
 
       // Waterline plane (semitransparent light blue)
-      const wlGeo = new THREE.PlaneGeometry(300, 80);
+      const wlGeo = new THREE.PlaneGeometry(350, 90);
       const wlMat = new THREE.MeshBasicMaterial({
-        color: 0x6495ed, // Cornflower blue
+        color: 0x5a9be5,
         transparent: true,
-        opacity: 0.25,
+        opacity: 0.22,
         side: THREE.DoubleSide,
       });
       const wlMesh = new THREE.Mesh(wlGeo, wlMat);
-      wlMesh.rotation.x = -Math.PI / 2; // flat
-      wlMesh.position.set(0, activeDraft, 0); // set height to current draft
+      wlMesh.rotation.x = -Math.PI / 2;
+      wlMesh.position.set(0, activeDraft, 0);
       group.add(wlMesh);
 
-      // Center of Buoyancy marker (Green Sphere)
+      // Center of Buoyancy (Green)
       const cbGeo = new THREE.SphereGeometry(1.2, 16, 16);
       const cbMat = new THREE.MeshBasicMaterial({ color: 0x8fbc8f });
       const cbMarker = new THREE.Mesh(cbGeo, cbMat);
-      // LCB is measured from stern (X=0), shift by halfL for viewport coordinates
       cbMarker.position.set(lcbRef.current - halfL, vcbRef.current, 0);
       group.add(cbMarker);
 
-      // Center of Gravity marker (Coral Sphere)
-      // Approximate CG height (see calculation formula in hydrostatics)
+      // Center of Gravity (Coral)
       const occupantKG = 2.0;
       const kayakKG = currentParams.hullHeight * 0.6;
-      const cgZ = (180 * occupantKG + 45 * kayakKG) / (180 + 45); // approximate CG height
+      const cgZ = (180 * occupantKG + 45 * kayakKG) / (180 + 45);
       
       const cgGeo = new THREE.SphereGeometry(1.2, 16, 16);
       const cgMat = new THREE.MeshBasicMaterial({ color: 0xff7a5c });
@@ -558,78 +544,63 @@ export default function ThreeViewport({
       cgMarker.position.set(lcbRef.current - halfL, cgZ, 0);
       group.add(cgMarker);
 
-      // Connect CB and CG with a vertical vector line to show stability alignment
+      // Stability Vector line
       const vectorPoints = [
         new THREE.Vector3(lcbRef.current - halfL, vcbRef.current, 0),
         new THREE.Vector3(lcbRef.current - halfL, cgZ, 0)
       ];
       const vectorGeo = new THREE.BufferGeometry().setFromPoints(vectorPoints);
-      const vectorLine = new THREE.Line(vectorGeo, new THREE.LineBasicMaterial({ color: 0xeae7df }));
-      group.add(vectorLine);
+      group.add(new THREE.Line(vectorGeo, new THREE.LineBasicMaterial({ color: 0x14231a, transparent: true, opacity: 0.5 })));
     }
 
-    // 6. CAD Dimension Overlays (Length & Beam)
+    // 8. CAD Dimensions
     if (showDimensionsRef.current) {
       const dimensionLineMaterial = new THREE.LineBasicMaterial({
-        color: 0x14231a, // Dark pine green/gray for technical vector line
+        color: 0x14231a,
         linewidth: 1,
       });
 
-      const lengthY = -8; // Positioned below the boat keel
+      const lengthY = -8;
       const lengthZ = 0;
       
-      // --- Length Line ---
+      // Length Dimension Line
       const lengthPoints = [
-        // Left Tick
         new THREE.Vector3(-halfL, lengthY - 2, lengthZ),
         new THREE.Vector3(-halfL, lengthY + 2, lengthZ),
         new THREE.Vector3(-halfL, lengthY, lengthZ),
-        
-        // Main Line
         new THREE.Vector3(halfL, lengthY, lengthZ),
-        
-        // Right Tick
         new THREE.Vector3(halfL, lengthY + 2, lengthZ),
         new THREE.Vector3(halfL, lengthY - 2, lengthZ)
       ];
       const lengthLineGeo = new THREE.BufferGeometry().setFromPoints(lengthPoints);
-      const lengthLine = new THREE.Line(lengthLineGeo, dimensionLineMaterial);
-      group.add(lengthLine);
+      group.add(new THREE.Line(lengthLineGeo, dimensionLineMaterial));
 
-      // Text label for Length
       const lengthLabel = createTextSprite(`L: ${currentParams.length.toFixed(1)} ft`, "#14231a", 24);
       lengthLabel.position.set(0, lengthY - 3.5, lengthZ);
       group.add(lengthLabel);
 
-      // --- Beam Line ---
+      // Beam Dimension Line
       const beamX = (currentParams.beamPlacement * L) - halfL;
       const beamY = -8;
       const halfBeamVal = currentParams.beam / 2;
 
       const beamPoints = [
-        // Top Tick (along X axis)
         new THREE.Vector3(beamX - 2, beamY, -halfBeamVal),
         new THREE.Vector3(beamX + 2, beamY, -halfBeamVal),
         new THREE.Vector3(beamX, beamY, -halfBeamVal),
-
-        // Main Line
         new THREE.Vector3(beamX, beamY, halfBeamVal),
-
-        // Bottom Tick (along X axis)
         new THREE.Vector3(beamX + 2, beamY, halfBeamVal),
         new THREE.Vector3(beamX - 2, beamY, halfBeamVal)
       ];
       const beamLineGeo = new THREE.BufferGeometry().setFromPoints(beamPoints);
-      const beamLine = new THREE.Line(beamLineGeo, dimensionLineMaterial);
-      group.add(beamLine);
+      group.add(new THREE.Line(beamLineGeo, dimensionLineMaterial));
 
-      // Text label for Beam
       const beamLabel = createTextSprite(`B: ${currentParams.beam.toFixed(1)} in`, "#14231a", 24);
       beamLabel.position.set(beamX, beamY - 3.5, 0);
       group.add(beamLabel);
     }
 
-    // Center of Buoyancy camera targeting (Dynamic LCB tracking)
+    // Camera target update
     if (viewModeRef.current === "perspective" && controlsRef.current) {
       controlsRef.current.target.set(lcbRef.current - halfL, currentParams.hullHeight / 3, 0);
       controlsRef.current.update();
