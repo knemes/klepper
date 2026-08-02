@@ -16,10 +16,10 @@ export class Gunwale extends KayakGeometry {
     const maxHalfBeam = params.beam / 2;
     const peakX = L * params.beamPlacement;
 
-    // Define sheer line heights (the sheer profile dipped in the center)
+    // Define sheer line heights (fully planar at hullHeight)
     const sternSheer = params.hullHeight;
-    const midSheer = params.hullHeight * 0.9;
-    const bowSheer = params.hullHeight + 1.5;
+    const midSheer = params.hullHeight;
+    const bowSheer = params.hullHeight;
 
     // Longitudinal positions for shoulders
     const sternShoulderX = peakX * 0.5;
@@ -30,8 +30,8 @@ export class Gunwale extends KayakGeometry {
     const bowShoulderY = maxHalfBeam * params.bowWidthFactor;
 
     // Interpolation heights for the shoulders
-    const sternShoulderZ = sternSheer - (sternSheer - midSheer) * 0.4;
-    const bowShoulderZ = midSheer + (bowSheer - midSheer) * 0.6;
+    const sternShoulderZ = params.hullHeight;
+    const bowShoulderZ = params.hullHeight;
 
     // 1. Construct left gunwale (negative Y values)
     const leftPts = new this.rhino.Point3dList();
@@ -56,10 +56,16 @@ export class Gunwale extends KayakGeometry {
     this.rightCurve = this.rhino.NurbsCurve.create(false, 3, rightPts);
   }
 
+  public sectionsImporter: any = null;
+
   /**
    * Evaluates the gunwale point on the left side at a given X.
    */
   public getLeftPointAtX(targetX: number): { x: number; y: number; z: number } {
+    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+      const y = -this.sectionsImporter.getGunwaleY(targetX);
+      return { x: targetX, y, z: this.sectionsImporter.getHullZ(targetX, y) };
+    }
     return this.getPointAtX(this.leftCurve, targetX);
   }
 
@@ -67,6 +73,10 @@ export class Gunwale extends KayakGeometry {
    * Evaluates the gunwale point on the right side at a given X.
    */
   public getRightPointAtX(targetX: number): { x: number; y: number; z: number } {
+    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+      const y = this.sectionsImporter.getGunwaleY(targetX);
+      return { x: targetX, y, z: this.sectionsImporter.getHullZ(targetX, y) };
+    }
     return this.getPointAtX(this.rightCurve, targetX);
   }
 

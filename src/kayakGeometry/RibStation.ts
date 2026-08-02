@@ -3,7 +3,7 @@ import { KayakGeometry } from "./KayakGeometry";
 
 export class RibStation extends KayakGeometry {
   public componentType = "RibStation";
-  
+
   public x: number;
   public keelPt: Point3D;
   public deckPt: Point3D;
@@ -24,6 +24,7 @@ export class RibStation extends KayakGeometry {
   public facetStartX: number = 0;
   public slope: number = 0;
   public deckPtUntrimmed: Point3D;
+  public sectionsImporter: any = null;
 
   constructor(
     rhino: any,
@@ -36,7 +37,8 @@ export class RibStation extends KayakGeometry {
     draft = 0,
     facetStartX = 0,
     slope = 0,
-    deckPtUntrimmed?: Point3D
+    deckPtUntrimmed?: Point3D,
+    sectionsImporter?: any
   ) {
     super(rhino);
     this.x = x;
@@ -47,6 +49,7 @@ export class RibStation extends KayakGeometry {
     this.facetStartX = facetStartX;
     this.slope = slope;
     this.deckPtUntrimmed = deckPtUntrimmed || deckPt;
+    this.sectionsImporter = sectionsImporter;
 
     this.buildSectionCurves(params);
     if (draft > 0) {
@@ -55,7 +58,7 @@ export class RibStation extends KayakGeometry {
   }
 
   private buildSectionCurves(params: KayakParameters) {
-    const segments = 16;
+    const segments = 32;
     const gY = Math.abs(this.gunwaleLeft.y); // half-beam width
     const keelZ = this.keelPt.z;
     const gunwaleZ = this.gunwaleLeft.z;
@@ -78,18 +81,33 @@ export class RibStation extends KayakGeometry {
     const leftHullList = new this.rhino.Point3dList();
     const rightHullList = new this.rhino.Point3dList();
 
-    for (let i = 0; i <= segments; i++) {
-      const t = i / segments;
-      
-      // Left side hull point
-      const hY = evaluateBezier1D(0, hullCPY, -gY, t);
-      const hZ = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
-      this.hullCurveLeft.push({ x: this.x, y: hY, z: hZ });
-      leftHullList.add(this.x, hY, hZ);
+    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        // Left side hull point
+        const hY = -gY + gY * t;
+        const hZ = this.sectionsImporter.getHullZ(this.x, hY);
+        this.hullCurveLeft.push({ x: this.x, y: hY, z: hZ });
+        leftHullList.add(this.x, hY, hZ);
 
-      // Right side hull point (mirror)
-      this.hullCurveRight.push({ x: this.x, y: -hY, z: hZ });
-      rightHullList.add(this.x, -hY, hZ);
+        // Right side hull point (mirror)
+        this.hullCurveRight.push({ x: this.x, y: -hY, z: hZ });
+        rightHullList.add(this.x, -hY, hZ);
+      }
+    } else {
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+
+        // Left side hull point
+        const hY = evaluateBezier1D(0, hullCPY, -gY, t);
+        const hZ = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
+        this.hullCurveLeft.push({ x: this.x, y: hY, z: hZ });
+        leftHullList.add(this.x, hY, hZ);
+
+        // Right side hull point (mirror)
+        this.hullCurveRight.push({ x: this.x, y: -hY, z: hZ });
+        rightHullList.add(this.x, -hY, hZ);
+      }
     }
 
     // Create rhino NURBS curves for the hull
@@ -113,8 +131,13 @@ export class RibStation extends KayakGeometry {
       const absY = Math.abs(dY);
 
       // Evaluate the untrimmed height
-      const yPct = absY / (gY || 1.0);
-      let dZ = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
+      let dZ = 0;
+      if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+        dZ = this.sectionsImporter.getDeckZ(this.x, dY);
+      } else {
+        const yPct = absY / (gY || 1.0);
+        dZ = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
+      }
 
       // Simply trim off the top of the rib using the plane
       if (isTrimmedZone) {
@@ -138,7 +161,7 @@ export class RibStation extends KayakGeometry {
     const submergedPointsLeft = this.hullCurveLeft.filter(p => p.z < draft);
     if (submergedPointsLeft.length > 1) {
       const pts = [...submergedPointsLeft];
-      
+
       // Interpolate the exact intersection point at the waterline (Z = draft)
       if (pts[pts.length - 1].z < draft && this.hullCurveLeft.length > pts.length) {
         const nextPt = this.hullCurveLeft[pts.length];
@@ -155,7 +178,7 @@ export class RibStation extends KayakGeometry {
         const dz = pts[j + 1].z - pts[j].z;
         area += ((y1 + y2) / 2.0) * dz;
       }
-      
+
       this.areaSubmerged = area * 2.0; // mirror for both sides
     }
   }
@@ -239,7 +262,7 @@ export class RibStation extends KayakGeometry {
         <text x="${svgX(0)}" y="${svgY(this.deckPt.z - 2.5)}" font-family="monospace" font-size="0.8" fill="#FF7A5C" text-anchor="middle">3" STRONGBACK NOTCH</text>
 
         <!-- Labels -->
-        <text x="${svgX(0)}" y="${svgY(this.keelPt.z + 3)}" font-family="serif" font-size="2" fill="#14231A" text-anchor="middle" font-style="italic">Station ${((this.x)/12).toFixed(1)}'</text>
+        <text x="${svgX(0)}" y="${svgY(this.keelPt.z + 3)}" font-family="serif" font-size="2" fill="#14231A" text-anchor="middle" font-style="italic">Station ${((this.x) / 12).toFixed(1)}'</text>
         <text x="${svgX(0)}" y="${svgY(this.keelPt.z + 1.5)}" font-family="monospace" font-size="1" fill="#2C4A3E" text-anchor="middle">X: ${this.x.toFixed(1)}" | ply: ${pt}"</text>
       </svg>
     `;

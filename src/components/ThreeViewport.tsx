@@ -352,11 +352,14 @@ export default function ThreeViewport({
 
     const getGunwaleAndDeckHeight = (xVal: number) => {
       const gunLeft = builder.gunwale.getLeftPointAtX(xVal);
-      const dPt = builder.deckLine.getPointAtX(xVal);
+      const dPtUntrimmed = builder.deckLine.getUntrimmedPointAtX(xVal);
+      const planeZ = sternDeckZ + xVal * builder.slope;
+      const yFlat = builder.getFlatPlaneWidth(xVal, planeZ, Math.abs(gunLeft.y), dPtUntrimmed.z);
       return {
         gunwaleY: Math.abs(gunLeft.y),
         gunwaleZ: gunLeft.z,
-        deckZ: dPt.z
+        deckZ: dPtUntrimmed.z,
+        yFlat
       };
     };
 
@@ -364,7 +367,6 @@ export default function ThreeViewport({
       currentParams,
       sternDeckZ,
       builder.slope,
-      builder.facetStartX,
       halfL,
       getGunwaleAndDeckHeight
     );
@@ -420,6 +422,27 @@ export default function ThreeViewport({
     const grGeo = new THREE.BufferGeometry().setFromPoints(gRightPoints);
     const grLine = new THREE.Line(grGeo, technicalLineMaterial);
     group.add(grLine);
+
+    // Flat deck facet boundary outline (evaluated from the smooth NURBS curve)
+    const facetPoints: THREE.Vector3[] = [];
+    if (builder.facetOutlineCurve) {
+      const facetDivs = 80;
+      const domain = builder.facetOutlineCurve.domain;
+      for (let i = 0; i <= facetDivs; i++) {
+        const t = domain[0] + (i / facetDivs) * (domain[1] - domain[0]);
+        const pt = builder.facetOutlineCurve.pointAt(t);
+        // Map to Three.js coordinates: X = length - halfL, Y = height, Z = width
+        facetPoints.push(new THREE.Vector3(pt[0] - halfL, pt[1], pt[2]));
+      }
+    }
+
+    const facetLineGeo = new THREE.BufferGeometry().setFromPoints(facetPoints);
+    const facetLineMaterial = new THREE.LineBasicMaterial({
+      color: 0xff8800, // Vibrant orange highlight
+      linewidth: 1
+    });
+    const facetLine = new THREE.Line(facetLineGeo, facetLineMaterial);
+    group.add(facetLine);
 
     // Deck Centerline outline
     const deckCenterPoints: THREE.Vector3[] = [];

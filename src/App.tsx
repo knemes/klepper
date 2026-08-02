@@ -20,10 +20,10 @@ export default function App() {
 
   // Bespoke Studio Parameters State
   const [params, setParams] = useState<KayakParameters>({
-    length: 14,             // feet
-    beam: 24,               // inches
-    hullHeight: 10.5,       // inches
-    totalHeight: 15.0,      // inches
+    length: 14,             // feet (168 inches)
+    beam: 28,               // inches
+    hullHeight: 8.0,        // inches
+    totalHeight: 12.0,      // inches
     beamPlacement: 0.52,    // relative X
     bowLength: 18,          // inches
     sternLength: 12,        // inches
@@ -33,11 +33,11 @@ export default function App() {
     hullHorizontalCurvature: 0.35,
     hullVerticalCurvature: 0.48,
     deckVerticalCurvature: 0.45,
-    deckLongitudinalPeak: 0.48,
+    deckLongitudinalPeak: 0.5536, // 93" from stern (75" from bow)
 
     cockpitLength: 34,
     cockpitWidth: 19,
-    cockpitStart: 80,
+    cockpitStart: 59,       // 93" - 34" = 59" from stern
 
     ribSpacing: 12,
     plywoodThickness: 0.75, // 3/4" plywood

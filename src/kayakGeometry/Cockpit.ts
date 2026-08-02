@@ -17,18 +17,23 @@ export class Cockpit extends KayakGeometry {
   /**
    * Evaluates the lateral boundary half-width (Y coordinate) of the cockpit opening at a given X.
    */
-  public getCockpitBoundaryY(x: number, params: KayakParameters): number {
+  public getCockpitBoundaryY(x: number, params: KayakParameters, naturalFacetY = 0): number {
     const activeCpStart = params.cockpitStart;
     const cpLength = params.cockpitLength;
     const cpWidth = params.cockpitWidth;
+    const cpCenterX = activeCpStart + cpLength / 2;
 
-    const xc = x - (activeCpStart + cpLength / 2);
-    const a = cpLength / 2;
-    const b = cpWidth / 2;
-    const ratio = (xc * xc) / (a * a || 1);
-    
-    // Elliptical cockpit cutout
-    return ratio < 1.0 ? b * Math.sqrt(1.0 - ratio) : 0.0;
+    if (x >= cpCenterX) {
+      // Front half: offset 1" inward from the flat plane outline
+      return Math.max(0.0, naturalFacetY - 1.0);
+    } else {
+      // Back half: rounded semi-ellipse based on cockpit length and width
+      const xc = x - cpCenterX;
+      const a = cpLength / 2;
+      const b = cpWidth / 2;
+      const ratio = (xc * xc) / (a * a || 1);
+      return ratio < 1.0 ? b * Math.sqrt(1.0 - ratio) : 0.0;
+    }
   }
 
   /**
@@ -38,9 +43,8 @@ export class Cockpit extends KayakGeometry {
     params: KayakParameters,
     sternDeckZ: number,
     slope: number,
-    facetStartX: number,
     halfL: number,
-    getGunwaleAndDeckHeight: (x: number) => { gunwaleY: number; gunwaleZ: number; deckZ: number }
+    getGunwaleAndDeckHeight: (x: number) => { gunwaleY: number; gunwaleZ: number; deckZ: number; yFlat: number }
   ): MeshData {
     const N = 40;
     const coamingVertices: number[] = [];
@@ -57,7 +61,6 @@ export class Cockpit extends KayakGeometry {
     };
 
     // Calculate normal vector of the tilted deck facet plane in XZ
-    // Tangent is (1, 0, slope), so normal is (-slope, 1, 0) in Three.js coordinates where X=length, Y=height
     const planeLen = Math.sqrt(1.0 + slope * slope);
     const nx = -slope / planeLen;
     const ny = 1.0 / planeLen;
@@ -67,31 +70,30 @@ export class Cockpit extends KayakGeometry {
     for (let i = 0; i < N; i++) {
       const angle = (i / N) * Math.PI * 2;
       const xc = (cpLength / 2) * Math.cos(angle);
-      const yc = (cpWidth / 2) * Math.sin(angle);
 
       const xVal = cpCenterX + xc;
       const zVal = getPlaneZ(xVal); // height of flat deck trimming plane at X
 
-      // Fetch the gunwale boundaries at this longitudinal station
-      const { gunwaleY } = getGunwaleAndDeckHeight(xVal);
+      // Fetch the gunwale boundaries and local flat plane width at this longitudinal station
+      const { yFlat } = getGunwaleAndDeckHeight(xVal);
 
-      // Restrict cockpit width to stay inside the deck flat facet
-      const yTarget = Math.min(params.cockpitWidth / 2 + 0.5, gunwaleY * 0.95);
-      let yFlat = 0;
-      if (xVal <= facetStartX) {
-        if (xVal <= cpCenterX) {
-          yFlat = xVal * (yTarget / (cpCenterX || 1));
-        } else {
-          yFlat = (facetStartX - xVal) * (yTarget / (facetStartX - cpCenterX || 1));
-        }
+      let activeYc = 0;
+      if (xc >= 0) {
+        // Front half: offset 1" from the flat facet boundary
+        activeYc = Math.max(0.0, yFlat - 1.0);
+      } else {
+        // Back half: rounded semi-ellipse
+        const ratio = (xc * xc) / ((cpLength / 2) * (cpLength / 2) || 1);
+        activeYc = ratio < 1.0 ? (cpWidth / 2) * Math.sqrt(1.0 - ratio) : 0.0;
       }
-      const maxAllowedHalfWidth = Math.max(1.0, yFlat);
-      const activeYc = Math.min(Math.abs(yc), maxAllowedHalfWidth) * Math.sign(yc);
+
+      // Mirror the sign of the angle
+      const finalY = Math.sign(Math.sin(angle)) * activeYc;
 
       // Coordinates mapped to Three.js orientation: X = length, Y = height, Z = width
       const tx = xVal - halfL;
       const ty = zVal;
-      const tz = activeYc;
+      const tz = finalY;
 
       // Extrude along the sloping deck facet normal
       const txTop = tx + coamingHeight * nx;

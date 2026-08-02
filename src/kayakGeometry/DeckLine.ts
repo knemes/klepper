@@ -58,10 +58,22 @@ export class DeckLine extends KayakGeometry {
     this.trimmedCurve = this.rhino.NurbsCurve.create(false, 1, pts);
   }
 
+  public sectionsImporter: any = null;
+
   /**
    * Evaluates the trimmed Z height (two straight lines).
    */
   public getPointAtX(targetX: number): { x: number; y: number; z: number } {
+    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+      const z_untrimmed = this.sectionsImporter.getDeckCenterlineZ(targetX);
+      const isTrimmedZone = targetX <= this.facetStartX;
+      if (isTrimmedZone) {
+        const planeZ = this.sternDeckZ + targetX * this.slope;
+        return { x: targetX, y: 0, z: Math.min(z_untrimmed, planeZ) };
+      }
+      return { x: targetX, y: 0, z: z_untrimmed };
+    }
+
     let z = this.totalHeight;
     if (this.L > 0) {
       if (targetX <= this.facetStartX) {
@@ -78,6 +90,10 @@ export class DeckLine extends KayakGeometry {
    * For targetX > facetStartX, returns the linear height to match the straight side profile.
    */
   public getUntrimmedPointAtX(targetX: number): { x: number; y: number; z: number } {
+    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+      return { x: targetX, y: 0, z: this.sectionsImporter.getDeckCenterlineZ(targetX) };
+    }
+
     if (targetX > this.facetStartX) {
       let z = this.totalHeight;
       if (this.L > 0) {

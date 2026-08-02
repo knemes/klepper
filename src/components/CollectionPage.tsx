@@ -39,9 +39,9 @@ export const PRESET_MODELS: PresetModel[] = [
     description: "A perfectly balanced touring craft offering responsive tracking, moderate cargo volume, and excellent initial stability. Our most popular design.",
     params: {
       length: 14,
-      beam: 24,
-      hullHeight: 10.5,
-      totalHeight: 15.0,
+      beam: 28,
+      hullHeight: 8.0,
+      totalHeight: 12.0,
       beamPlacement: 0.52,
       bowLength: 18,
       sternLength: 12,
@@ -50,10 +50,10 @@ export const PRESET_MODELS: PresetModel[] = [
       hullHorizontalCurvature: 0.35,
       hullVerticalCurvature: 0.48,
       deckVerticalCurvature: 0.45,
-      deckLongitudinalPeak: 0.48,
+      deckLongitudinalPeak: 0.5536, // 93" from stern (75" from bow)
       cockpitLength: 34,
       cockpitWidth: 19,
-      cockpitStart: 80,
+      cockpitStart: 59,
       ribSpacing: 12,
       plywoodThickness: 0.75
     }

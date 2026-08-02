@@ -6,6 +6,8 @@ import { Keel } from "./Keel";
 import { DeckLine } from "./DeckLine";
 import { Gunwale } from "./Gunwale";
 import { Cockpit } from "./Cockpit";
+import { SectionsImporter } from "./SectionsImporter";
+import sectionsData from "../../kayak_sections.json";
 
 export class KayakBuilder {
   private rhino: any;
@@ -17,6 +19,8 @@ export class KayakBuilder {
   public deckLine: DeckLine;
   public gunwale: Gunwale;
   public cockpit: Cockpit;
+  public sectionsImporter: SectionsImporter;
+  public facetOutlineCurve: any = null;
 
   // Dynamic flat plane parameters
   public facetStartX: number = 0;
@@ -27,6 +31,9 @@ export class KayakBuilder {
     this.rhino = rhino;
     this.params = params;
 
+    const L = params.length * 12;
+    this.sectionsImporter = new SectionsImporter(sectionsData, L);
+
     // Instantiate all components
     this.bow = new Bow(this.rhino, this.params);
     this.stern = new Stern(this.rhino, this.params);
@@ -35,13 +42,22 @@ export class KayakBuilder {
     this.gunwale = new Gunwale(this.rhino, this.params);
     this.cockpit = new Cockpit(this.rhino);
 
+    // Pass sectionsImporter to the components
+    this.keel.sectionsImporter = this.sectionsImporter;
+    this.deckLine.sectionsImporter = this.sectionsImporter;
+    this.gunwale.sectionsImporter = this.sectionsImporter;
+
     // Compute flat deck plane parameters based directly on cockpit position
     this.sternDeckZ = this.deckLine.getUntrimmedPointAtX(0).z;
     this.facetStartX = this.params.cockpitStart + this.params.cockpitLength;
-    this.slope = (this.params.totalHeight - this.sternDeckZ) / (this.facetStartX || 1);
+    const peakHeight = this.deckLine.getUntrimmedPointAtX(this.facetStartX).z;
+    this.slope = (peakHeight - this.sternDeckZ) / (this.facetStartX || 1);
 
     // Update the deckLine geometry with the solved facetStartX and slope
     this.deckLine.updateGeometry(this.params, this.facetStartX, this.slope, this.sternDeckZ);
+
+    // Build the closed NURBS outline curve of the flat deck facet
+    this.buildFacetOutline();
   }
 
   /**
@@ -75,7 +91,8 @@ export class KayakBuilder {
           draft,
           this.facetStartX,
           this.slope,
-          deckPtUntrimmed
+          deckPtUntrimmed,
+          this.sectionsImporter
         )
       );
     }
@@ -119,16 +136,21 @@ export class KayakBuilder {
         let vy: number;
         let vz: number;
 
-        if (vPct <= 0.5) {
-          // Left side
-          const t = vPct / 0.5;
-          vy = evaluateBezier1D(0, hullCPY, -gunwaleY, t);
-          vz = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
+        if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+          vy = -gunwaleY + 2.0 * gunwaleY * vPct;
+          vz = this.sectionsImporter.getHullZ(x, vy);
         } else {
-          // Right side (mirror)
-          const t = (vPct - 0.5) / 0.5;
-          vy = evaluateBezier1D(0, -hullCPY, gunwaleY, t);
-          vz = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
+          if (vPct <= 0.5) {
+            // Left side
+            const t = vPct / 0.5;
+            vy = evaluateBezier1D(0, hullCPY, -gunwaleY, t);
+            vz = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
+          } else {
+            // Right side (mirror)
+            const t = (vPct - 0.5) / 0.5;
+            vy = evaluateBezier1D(0, -hullCPY, gunwaleY, t);
+            vz = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
+          }
         }
 
         vertices.push(x, vz, vy); // X=length, Y=height, Z=width
@@ -166,7 +188,7 @@ export class KayakBuilder {
   public generateDeckMesh(): MeshData {
     const L = this.params.length * 12;
     const uSegments = 50;
-    const vSegments = 20;
+    const vSegments = 50;
 
     const vertices: number[] = [];
     const indices: number[] = [];
@@ -202,8 +224,13 @@ export class KayakBuilder {
         const absY = Math.abs(vy);
 
         // Evaluate the original untrimmed deck height
-        const yPct = absY / (gunwaleY || 1.0);
-        let vz = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
+        let vz = deckZ_untrimmed;
+        if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+          vz = this.sectionsImporter.getDeckZ(x, vy);
+        } else {
+          const yPct = absY / (gunwaleY || 1.0);
+          vz = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
+        }
 
         // Trim the top of the rib/deck with the plane (leaves side arcs untouched)
         if (isTrimmedZone) {
@@ -213,11 +240,9 @@ export class KayakBuilder {
 
         // Apply cockpit cutout
         if (isInCockpitZone) {
-          const boundaryY = this.cockpit.getCockpitBoundaryY(x, this.params);
           const planeZ = getPlaneZ(x);
-          
-          const yPctInt = Math.max(0, Math.min(1, (deckZ_untrimmed - planeZ) / (deckZ_untrimmed - gunwaleZ || 1)));
-          const naturalFacetY = Math.pow(yPctInt, 1.0 / pPower) * gunwaleY;
+          const naturalFacetY = this.getFlatPlaneWidth(x, planeZ, gunwaleY, deckZ_untrimmed);
+          const boundaryY = this.cockpit.getCockpitBoundaryY(x, this.params, naturalFacetY);
           const maxAllowedHalfWidth = Math.max(1.0, naturalFacetY - 1.0);
           const activeBoundaryY = Math.min(boundaryY, maxAllowedHalfWidth);
 
@@ -319,7 +344,8 @@ export class KayakBuilder {
           draft,
           this.facetStartX,
           this.slope,
-          deckPtUntrimmed
+          deckPtUntrimmed,
+          this.sectionsImporter
         );
 
         const area = station.areaSubmerged;
@@ -405,6 +431,7 @@ export class KayakBuilder {
     if (this.deckLine.curve) file.objects().addCurve(this.deckLine.curve);
     if (this.gunwale.leftCurve) file.objects().addCurve(this.gunwale.leftCurve);
     if (this.gunwale.rightCurve) file.objects().addCurve(this.gunwale.rightCurve);
+    if (this.facetOutlineCurve) file.objects().addCurve(this.facetOutlineCurve);
 
     // 2. Write all structural transverse rib curves
     const stations = this.generateStations(0);
@@ -441,12 +468,105 @@ export class KayakBuilder {
 
     // Serialize to binary buffer
     const buffer = file.toByteArray();
-    
+
     // Dispose the Native objects to prevent WASM memory leaks
     file.delete();
     rhinoHull.delete();
     rhinoDeck.delete();
 
     return buffer;
+  }
+
+  /**
+   * Calculates the half-width of the flat deck trimming plane at a given longitudinal coordinate X.
+   * If sections data is loaded, uses bisection to find the exact intersection of the flat plane and the deck.
+   * Otherwise, falls back to the parametric curve equation.
+   */
+  public getFlatPlaneWidth(x: number, planeZ: number, gunwaleY: number, deckZ_untrimmed: number): number {
+    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+      let yMin = 0.0;
+      let yMax = gunwaleY;
+      let yMid = 0.0;
+
+      const centerZ = this.sectionsImporter.getDeckCenterlineZ(x);
+      if (planeZ >= centerZ) return 0.0; // trimming plane is above the deck crown
+
+      // 12 iterations gives sub-millimeter precision along the beam
+      for (let iter = 0; iter < 12; iter++) {
+        yMid = (yMin + yMax) / 2;
+        const z = this.sectionsImporter.getDeckZ(x, yMid);
+        if (z > planeZ) {
+          // Since the deck curves down as we move away from centerline, a Z > planeZ
+          // means we are still inside the flat plane zone. Increase Y.
+          yMin = yMid;
+        } else {
+          yMax = yMid;
+        }
+      }
+      return yMid;
+    } else {
+      const gunwaleZ = 8.0; // planar gunwale height
+      const pPower = 1.0 + this.params.deckVerticalCurvature * 2.2;
+      const yPctInt = Math.max(0, Math.min(1, (deckZ_untrimmed - planeZ) / (deckZ_untrimmed - gunwaleZ || 1)));
+      return Math.pow(yPctInt, 1.0 / pPower) * gunwaleY;
+    }
+  }
+
+  /**
+   * Constructs a closed cubic NURBS curve outlining the boundary of the flat trimmed deck facet.
+   * Runs forward along the left edge, loops at the peak, and returns along the right edge.
+   * Samples only at the actual station intervals to allow the cubic spline solver to generate a fair, smooth arc.
+   */
+  public buildFacetOutline() {
+    const pts = new this.rhino.Point3dList();
+    
+    // Generate sparse sampling coordinates at the actual section stations
+    const xVals: number[] = [];
+    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+      this.sectionsImporter.sections.forEach(s => {
+        if (s.x < this.facetStartX) {
+          xVals.push(s.x);
+        }
+      });
+    } else {
+      const step = 12.0;
+      for (let x = 0; x < this.facetStartX; x += step) {
+        xVals.push(x);
+      }
+    }
+
+    // 1. Left boundary points
+    for (let i = 0; i < xVals.length; i++) {
+      const x = xVals[i];
+      const planeZ = this.sternDeckZ + x * this.slope;
+      const gunLeft = this.gunwale.getLeftPointAtX(x);
+      const dPtUntrimmed = this.deckLine.getUntrimmedPointAtX(x);
+      const yFlat = this.getFlatPlaneWidth(x, planeZ, Math.abs(gunLeft.y), dPtUntrimmed.z);
+      pts.add(x, planeZ, -yFlat);
+    }
+    
+    // Peak vertex
+    const peakZ = this.sternDeckZ + this.facetStartX * this.slope;
+    pts.add(this.facetStartX, peakZ, 0.0);
+    
+    // 2. Right boundary points (stepping backward)
+    for (let i = xVals.length - 1; i >= 0; i--) {
+      const x = xVals[i];
+      const planeZ = this.sternDeckZ + x * this.slope;
+      const gunLeft = this.gunwale.getLeftPointAtX(x);
+      const dPtUntrimmed = this.deckLine.getUntrimmedPointAtX(x);
+      const yFlat = this.getFlatPlaneWidth(x, planeZ, Math.abs(gunLeft.y), dPtUntrimmed.z);
+      pts.add(x, planeZ, yFlat);
+    }
+    
+    // 3. Close the curve by adding the start point
+    const startPlaneZ = this.sternDeckZ;
+    const startGunLeft = this.gunwale.getLeftPointAtX(0);
+    const startDPtUntrimmed = this.deckLine.getUntrimmedPointAtX(0);
+    const startYFlat = this.getFlatPlaneWidth(0, startPlaneZ, Math.abs(startGunLeft.y), startDPtUntrimmed.z);
+    pts.add(0, startPlaneZ, -startYFlat);
+    
+    // Create cubic NURBS curve
+    this.facetOutlineCurve = this.rhino.NurbsCurve.create(false, 3, pts);
   }
 }
