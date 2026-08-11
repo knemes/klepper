@@ -241,10 +241,8 @@ export class KayakBuilder {
         // Apply cockpit cutout
         if (isInCockpitZone) {
           const planeZ = getPlaneZ(x);
-          const naturalFacetY = this.getFlatPlaneWidth(x, planeZ, gunwaleY, deckZ_untrimmed);
-          const boundaryY = this.cockpit.getCockpitBoundaryY(x, this.params, naturalFacetY);
-          const maxAllowedHalfWidth = Math.max(1.0, naturalFacetY - 1.0);
-          const activeBoundaryY = Math.min(boundaryY, maxAllowedHalfWidth);
+          const boundaryY = this.cockpit.getCockpitBoundaryY(x, this.params, this.facetOutlineCurve);
+          const activeBoundaryY = boundaryY;
 
           if (absY < activeBoundaryY) {
             vy = vy < 0 ? -activeBoundaryY : activeBoundaryY;
@@ -510,6 +508,39 @@ export class KayakBuilder {
       const yPctInt = Math.max(0, Math.min(1, (deckZ_untrimmed - planeZ) / (deckZ_untrimmed - gunwaleZ || 1)));
       return Math.pow(yPctInt, 1.0 / pPower) * gunwaleY;
     }
+  }
+
+  /**
+   * Evaluates the smooth half-width of the flat deck facet by binary searching
+   * the closed cubic NURBS facetOutlineCurve.
+   */
+  public getSmoothFacetYAtX(xVal: number): number {
+    if (!this.facetOutlineCurve) return 0.0;
+
+    const curve = this.facetOutlineCurve;
+    const domain = curve.domain;
+    const tMin = domain[0];
+    const tMax = domain[1];
+    const tMid = (tMin + tMax) / 2;
+
+    // Search on the left half of the closed curve (where t goes from tMin to tMid)
+    let low = tMin;
+    let high = tMid;
+
+    for (let iter = 0; iter < 16; iter++) {
+      const t = (low + high) / 2;
+      const pt = curve.pointAt(t);
+      const px = pt[0];
+
+      if (px < xVal) {
+        low = t;
+      } else {
+        high = t;
+      }
+    }
+    const finalT = (low + high) / 2;
+    const pt = curve.pointAt(finalT);
+    return Math.abs(pt[2]); // Y is the lateral half-width coordinate
   }
 
   /**

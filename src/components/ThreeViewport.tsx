@@ -368,7 +368,8 @@ export default function ThreeViewport({
       sternDeckZ,
       builder.slope,
       halfL,
-      getGunwaleAndDeckHeight
+      getGunwaleAndDeckHeight,
+      builder.facetOutlineCurve
     );
 
     const coamingGeo = new THREE.BufferGeometry();

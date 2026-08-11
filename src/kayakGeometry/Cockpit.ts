@@ -17,20 +17,96 @@ export class Cockpit extends KayakGeometry {
   /**
    * Evaluates the lateral boundary half-width (Y coordinate) of the cockpit opening at a given X.
    */
-  public getCockpitBoundaryY(x: number, params: KayakParameters, naturalFacetY = 0): number {
+  public getCockpitBoundaryY(
+    x: number,
+    params: KayakParameters,
+    facetOutlineCurve?: any
+  ): number {
     const activeCpStart = params.cockpitStart;
     const cpLength = params.cockpitLength;
     const cpWidth = params.cockpitWidth;
     const cpCenterX = activeCpStart + cpLength / 2;
+    const activeCpEnd = activeCpStart + cpLength;
+
+    if (!facetOutlineCurve) {
+      // Fallback if curve not available
+      if (x >= cpCenterX) {
+        return Math.max(0.0, cpWidth / 2 - 1.0);
+      } else {
+        const xc = x - cpCenterX;
+        const a = cpLength / 2;
+        const b = Math.max(0.0, cpWidth / 2 - 1.0);
+        const ratio = (xc * xc) / (a * a || 1);
+        return ratio < 1.0 ? b * Math.sqrt(1.0 - ratio) : 0.0;
+      }
+    }
+
+    const getOffsetFacetYAtX = (xVal: number, offsetDist: number): number => {
+      const domain = facetOutlineCurve.domain;
+      const tMin = domain[0];
+      const tMax = domain[1];
+      const tMid = (tMin + tMax) / 2;
+
+      const getOffsetPt = (tVal: number) => {
+        const t = Math.max(tMin, Math.min(tMid, tVal));
+        const eps = 0.001;
+        const pt = facetOutlineCurve.pointAt(t);
+
+        const tPrev = Math.max(tMin, t - eps);
+        const tNext = Math.min(tMid, t + eps);
+        const ptPrev = facetOutlineCurve.pointAt(tPrev);
+        const ptNext = facetOutlineCurve.pointAt(tNext);
+
+        const dx = (ptNext[0] - ptPrev[0]) / (tNext - tPrev || 1);
+        const dy = (ptNext[2] - ptPrev[2]) / (tNext - tPrev || 1);
+
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 1e-6) {
+          return { x: pt[0], y: pt[2] };
+        }
+
+        const nx = -dy / len;
+        const ny = dx / len;
+
+        return {
+          x: pt[0] + offsetDist * nx,
+          y: pt[2] + offsetDist * ny
+        };
+      };
+
+      let low = tMin;
+      let high = tMid;
+
+      for (let iter = 0; iter < 20; iter++) {
+        const t = (low + high) / 2;
+        const opt = getOffsetPt(t);
+        if (opt.x < xVal) {
+          low = t;
+        } else {
+          high = t;
+        }
+      }
+
+      const finalT = (low + high) / 2;
+      const opt = getOffsetPt(finalT);
+
+      // If the offset Y has crossed the centerline (i.e. opt.y >= 0, since on the left it starts negative),
+      // it means we are past the front tip of the offset curve. Return 0.
+      if (opt.y >= 0.0) {
+        return 0.0;
+      }
+
+      return Math.abs(opt.y);
+    };
 
     if (x >= cpCenterX) {
-      // Front half: offset 1" inward from the flat plane outline
-      return Math.max(0.0, naturalFacetY - 1.0);
+      // Front half: offset 1" inward from the smooth flat plane outline curve
+      return getOffsetFacetYAtX(x, 1.0);
     } else {
-      // Back half: rounded semi-ellipse based on cockpit length and width
+      // Back half: rounded semi-ellipse closed out smoothly from the midpoint
       const xc = x - cpCenterX;
       const a = cpLength / 2;
-      const b = cpWidth / 2;
+      const b = getOffsetFacetYAtX(cpCenterX, 1.0);
       const ratio = (xc * xc) / (a * a || 1);
       return ratio < 1.0 ? b * Math.sqrt(1.0 - ratio) : 0.0;
     }
@@ -44,7 +120,8 @@ export class Cockpit extends KayakGeometry {
     sternDeckZ: number,
     slope: number,
     halfL: number,
-    getGunwaleAndDeckHeight: (x: number) => { gunwaleY: number; gunwaleZ: number; deckZ: number; yFlat: number }
+    getGunwaleAndDeckHeight: (x: number) => { gunwaleY: number; gunwaleZ: number; deckZ: number; yFlat: number },
+    facetOutlineCurve?: any
   ): MeshData {
     const N = 40;
     const coamingVertices: number[] = [];
@@ -53,7 +130,6 @@ export class Cockpit extends KayakGeometry {
 
     const activeCpStart = params.cockpitStart;
     const cpLength = params.cockpitLength;
-    const cpWidth = params.cockpitWidth;
     const cpCenterX = activeCpStart + cpLength / 2;
 
     const getPlaneZ = (xVal: number) => {
@@ -74,18 +150,8 @@ export class Cockpit extends KayakGeometry {
       const xVal = cpCenterX + xc;
       const zVal = getPlaneZ(xVal); // height of flat deck trimming plane at X
 
-      // Fetch the gunwale boundaries and local flat plane width at this longitudinal station
-      const { yFlat } = getGunwaleAndDeckHeight(xVal);
-
-      let activeYc = 0;
-      if (xc >= 0) {
-        // Front half: offset 1" from the flat facet boundary
-        activeYc = Math.max(0.0, yFlat - 1.0);
-      } else {
-        // Back half: rounded semi-ellipse
-        const ratio = (xc * xc) / ((cpLength / 2) * (cpLength / 2) || 1);
-        activeYc = ratio < 1.0 ? (cpWidth / 2) * Math.sqrt(1.0 - ratio) : 0.0;
-      }
+      // Evaluate the smooth cockpit boundary half-width using getCockpitBoundaryY
+      const activeYc = this.getCockpitBoundaryY(xVal, params, facetOutlineCurve);
 
       // Mirror the sign of the angle
       const finalY = Math.sign(Math.sin(angle)) * activeYc;
