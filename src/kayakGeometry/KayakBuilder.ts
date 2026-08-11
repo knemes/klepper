@@ -599,5 +599,6 @@ export class KayakBuilder {
     
     // Create cubic NURBS curve
     this.facetOutlineCurve = this.rhino.NurbsCurve.create(false, 3, pts);
+    pts.delete();
   }
 }

@@ -41,72 +41,58 @@ export class Cockpit extends KayakGeometry {
       }
     }
 
-    const getOffsetFacetYAtX = (xVal: number, offsetDist: number): number => {
+    // Binary search helper to evaluate smooth facetOutlineCurve
+    const getSmoothFacetYAtX = (xVal: number): number => {
       const domain = facetOutlineCurve.domain;
       const tMin = domain[0];
       const tMax = domain[1];
       const tMid = (tMin + tMax) / 2;
 
-      const getOffsetPt = (tVal: number) => {
-        const t = Math.max(tMin, Math.min(tMid, tVal));
-        const eps = 0.001;
-        const pt = facetOutlineCurve.pointAt(t);
-
-        const tPrev = Math.max(tMin, t - eps);
-        const tNext = Math.min(tMid, t + eps);
-        const ptPrev = facetOutlineCurve.pointAt(tPrev);
-        const ptNext = facetOutlineCurve.pointAt(tNext);
-
-        const dx = (ptNext[0] - ptPrev[0]) / (tNext - tPrev || 1);
-        const dy = (ptNext[2] - ptPrev[2]) / (tNext - tPrev || 1);
-
-        const len = Math.sqrt(dx * dx + dy * dy);
-        if (len < 1e-6) {
-          return { x: pt[0], y: pt[2] };
-        }
-
-        const nx = -dy / len;
-        const ny = dx / len;
-
-        return {
-          x: pt[0] + offsetDist * nx,
-          y: pt[2] + offsetDist * ny
-        };
-      };
-
       let low = tMin;
       let high = tMid;
 
-      for (let iter = 0; iter < 20; iter++) {
+      for (let iter = 0; iter < 16; iter++) {
         const t = (low + high) / 2;
-        const opt = getOffsetPt(t);
-        if (opt.x < xVal) {
+        const pt = facetOutlineCurve.pointAt(t);
+        const px = pt[0];
+
+        if (px < xVal) {
           low = t;
         } else {
           high = t;
         }
       }
-
       const finalT = (low + high) / 2;
-      const opt = getOffsetPt(finalT);
-
-      // If the offset Y has crossed the centerline (i.e. opt.y >= 0, since on the left it starts negative),
-      // it means we are past the front tip of the offset curve. Return 0.
-      if (opt.y >= 0.0) {
-        return 0.0;
-      }
-
-      return Math.abs(opt.y);
+      const pt = facetOutlineCurve.pointAt(finalT);
+      return Math.abs(pt[2]);
     };
+
+    // Find the exact X where the smooth facet width is 1.0 inch
+    let lowX = cpCenterX;
+    let highX = activeCpEnd;
+    for (let iter = 0; iter < 12; iter++) {
+      const midX = (lowX + highX) / 2;
+      const yVal = getSmoothFacetYAtX(midX);
+      if (yVal > 1.0) {
+        lowX = midX;
+      } else {
+        highX = midX;
+      }
+    }
+    const coamingMaxX = (lowX + highX) / 2;
 
     if (x >= cpCenterX) {
       // Front half: offset 1" inward from the smooth flat plane outline curve
-      return getOffsetFacetYAtX(x, 1.0);
+      if (x >= coamingMaxX) {
+        return 0.0;
+      }
+      const yVal = getSmoothFacetYAtX(x);
+      return Math.max(0.0, yVal - 1.0);
     } else {
       // Back half: rounded semi-ellipse closed out smoothly from the midpoint
       const xc = x - cpCenterX;
       const a = cpLength / 2;
-      const b = getOffsetFacetYAtX(cpCenterX, 1.0);
+      const b = Math.max(0.0, getSmoothFacetYAtX(cpCenterX) - 1.0);
       const ratio = (xc * xc) / (a * a || 1);
       return ratio < 1.0 ? b * Math.sqrt(1.0 - ratio) : 0.0;
     }
@@ -131,6 +117,7 @@ export class Cockpit extends KayakGeometry {
     const activeCpStart = params.cockpitStart;
     const cpLength = params.cockpitLength;
     const cpCenterX = activeCpStart + cpLength / 2;
+    const activeCpEnd = activeCpStart + cpLength;
 
     const getPlaneZ = (xVal: number) => {
       return sternDeckZ + xVal * slope;
@@ -143,11 +130,64 @@ export class Cockpit extends KayakGeometry {
 
     const coamingHeight = params.coamingHeight !== undefined ? params.coamingHeight : 0.75;
 
+    // Helper to evaluate smooth facetOutlineCurve
+    const getSmoothFacetYAtX = (xVal: number): number => {
+      if (!facetOutlineCurve) return getGunwaleAndDeckHeight(xVal).yFlat;
+      const domain = facetOutlineCurve.domain;
+      const tMin = domain[0];
+      const tMax = domain[1];
+      const tMid = (tMin + tMax) / 2;
+
+      let low = tMin;
+      let high = tMid;
+      for (let iter = 0; iter < 16; iter++) {
+        const t = (low + high) / 2;
+        const pt = facetOutlineCurve.pointAt(t);
+        const px = pt[0];
+        if (px < xVal) {
+          low = t;
+        } else {
+          high = t;
+        }
+      }
+      const finalT = (low + high) / 2;
+      const pt = facetOutlineCurve.pointAt(finalT);
+      return Math.abs(pt[2]);
+    };
+
+    // Find the exact X where the smooth facet width is 1.0 inch
+    let coamingMaxX = activeCpEnd;
+    if (facetOutlineCurve) {
+      let lowX = cpCenterX;
+      let highX = activeCpEnd;
+      for (let iter = 0; iter < 12; iter++) {
+        const midX = (lowX + highX) / 2;
+        const yVal = getSmoothFacetYAtX(midX);
+        if (yVal > 1.0) {
+          lowX = midX;
+        } else {
+          highX = midX;
+        }
+      }
+      coamingMaxX = (lowX + highX) / 2;
+    }
+
+    const L_front = coamingMaxX - cpCenterX;
+    const L_back = cpCenterX - activeCpStart;
+
     for (let i = 0; i < N; i++) {
       const angle = (i / N) * Math.PI * 2;
-      const xc = (cpLength / 2) * Math.cos(angle);
+      const cosA = Math.cos(angle);
 
-      const xVal = cpCenterX + xc;
+      let xVal = cpCenterX;
+      if (cosA >= 0) {
+        // Front half: spans from cpCenterX to coamingMaxX
+        xVal = cpCenterX + L_front * cosA;
+      } else {
+        // Back half: spans from cpCenterX to activeCpStart
+        xVal = cpCenterX + L_back * cosA;
+      }
+
       const zVal = getPlaneZ(xVal); // height of flat deck trimming plane at X
 
       // Evaluate the smooth cockpit boundary half-width using getCockpitBoundaryY
