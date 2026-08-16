@@ -187,26 +187,43 @@ export class KayakBuilder {
    */
   public generateDeckMesh(): MeshData {
     const L = this.params.length * 12;
-    const uSegments = 50;
-    const vSegments = 50;
+    const vSegments = 51; // Changed from 50 to 51 (odd) to eliminate centerline vertex, preventing crossover clamping artifacts
 
     const vertices: number[] = [];
     const indices: number[] = [];
     const uvs: number[] = [];
 
     const pPower = 1.0 + this.params.deckVerticalCurvature * 2.2;
-    const facetStartX = this.facetStartX;
-
     const activeCpStart = this.params.cockpitStart;
     const activeCpEnd = activeCpStart + this.params.cockpitLength;
+
+    const xVals: number[] = [];
+    const uSegs1 = 20; // Stern to cockpit start
+    const uSegs2 = 50; // Cockpit zone (high resolution)
+    const uSegs3 = 30; // Cockpit end to bow
+
+    // Zone 1: Stern to cockpit start
+    for (let i = 0; i < uSegs1; i++) {
+      xVals.push((i / uSegs1) * activeCpStart);
+    }
+    // Zone 2: Cockpit zone
+    for (let i = 0; i < uSegs2; i++) {
+      xVals.push(activeCpStart + (i / uSegs2) * (activeCpEnd - activeCpStart));
+    }
+    // Zone 3: Cockpit end to bow
+    for (let i = 0; i <= uSegs3; i++) {
+      xVals.push(activeCpEnd + (i / uSegs3) * (L - activeCpEnd));
+    }
+
+    const uSegments = xVals.length - 1;
 
     const getPlaneZ = (xVal: number) => {
       return this.sternDeckZ + xVal * this.slope;
     };
 
     for (let u = 0; u <= uSegments; u++) {
-      const uPct = u / uSegments;
-      const x = uPct * L;
+      const x = xVals[u];
+      const uPct = x / L;
 
       const gunLeft = this.gunwale.getLeftPointAtX(x);
       const deckPt_untrimmed = this.deckLine.getUntrimmedPointAtX(x);
@@ -215,7 +232,7 @@ export class KayakBuilder {
       const gunwaleZ = gunLeft.z;
       const deckZ_untrimmed = deckPt_untrimmed.z;
 
-      const isTrimmedZone = x <= facetStartX;
+      const isTrimmedZone = x <= this.facetStartX;
       const isInCockpitZone = x >= activeCpStart && x <= activeCpEnd;
 
       for (let v = 0; v <= vSegments; v++) {
@@ -257,18 +274,34 @@ export class KayakBuilder {
 
     // Build indices (skipping faces inside the cockpit opening)
     for (let u = 0; u < uSegments; u++) {
-      const x = (u / uSegments) * L;
-      const nextX = ((u + 1) / uSegments) * L;
-      const isFullCockpitIndex = (x > activeCpStart && x < activeCpEnd) && (nextX > activeCpStart && nextX < activeCpEnd);
+      const x = xVals[u];
+      const nextX = xVals[u + 1];
+      const inCpU = x >= activeCpStart && x <= activeCpEnd;
+      const inCpNextU = nextX >= activeCpStart && nextX <= activeCpEnd;
+
+      const boundaryY = inCpU ? this.cockpit.getCockpitBoundaryY(x, this.params, this.facetOutlineCurve) : 0.0;
+      const nextBoundaryY = inCpNextU ? this.cockpit.getCockpitBoundaryY(nextX, this.params, this.facetOutlineCurve) : 0.0;
+
+      const gunLeft = this.gunwale.getLeftPointAtX(x);
+      const gunwaleY = Math.abs(gunLeft.y);
+      const nextGunLeft = this.gunwale.getLeftPointAtX(nextX);
+      const nextGunwaleY = Math.abs(nextGunLeft.y);
 
       for (let v = 0; v < vSegments; v++) {
-        if (isFullCockpitIndex) {
-          const vPct = v / vSegments;
-          const nextVPct = (v + 1) / vSegments;
-          // Skip drawing in the cockpit opening (middle 40% of grid)
-          if (vPct > 0.3 && nextVPct < 0.7) {
-            continue;
-          }
+        const vPct = v / vSegments;
+        const nextVPct = (v + 1) / vSegments;
+
+        const vy = -gunwaleY + 2.0 * gunwaleY * vPct;
+        const nextVy = -gunwaleY + 2.0 * gunwaleY * nextVPct;
+
+        const nextXvy = -nextGunwaleY + 2.0 * nextGunwaleY * vPct;
+        const nextXnextVy = -nextGunwaleY + 2.0 * nextGunwaleY * nextVPct;
+
+        const isInsideU = inCpU && (vy >= -boundaryY && nextVy <= boundaryY);
+        const isInsideNextU = inCpNextU && (nextXvy >= -nextBoundaryY && nextXnextVy <= nextBoundaryY);
+
+        if (isInsideU && isInsideNextU) {
+          continue; // Skip drawing in the cockpit opening
         }
 
         const row1 = u * (vSegments + 1);
@@ -510,10 +543,6 @@ export class KayakBuilder {
     }
   }
 
-  /**
-   * Evaluates the smooth half-width of the flat deck facet by binary searching
-   * the closed cubic NURBS facetOutlineCurve.
-   */
   public getSmoothFacetYAtX(xVal: number): number {
     if (!this.facetOutlineCurve) return 0.0;
 
@@ -521,11 +550,24 @@ export class KayakBuilder {
     const domain = curve.domain;
     const tMin = domain[0];
     const tMax = domain[1];
-    const tMid = (tMin + tMax) / 2;
 
-    // Search on the left half of the closed curve (where t goes from tMin to tMid)
+    // Find tPeak of facetOutlineCurve using a ternary search to ensure monotonic X in the search interval
+    let lowT = tMin;
+    let highT = tMax;
+    for (let iter = 0; iter < 20; iter++) {
+      const t1 = lowT + (highT - lowT) / 3;
+      const t2 = highT - (highT - lowT) / 3;
+      if (curve.pointAt(t1)[0] < curve.pointAt(t2)[0]) {
+        lowT = t1;
+      } else {
+        highT = t2;
+      }
+    }
+    const tPeak = (lowT + highT) / 2;
+
+    // Search on the left half of the closed curve (where t goes from tMin to tPeak)
     let low = tMin;
-    let high = tMid;
+    let high = tPeak;
 
     for (let iter = 0; iter < 16; iter++) {
       const t = (low + high) / 2;

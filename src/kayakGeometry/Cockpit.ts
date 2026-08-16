@@ -41,58 +41,79 @@ export class Cockpit extends KayakGeometry {
       }
     }
 
-    // Binary search helper to evaluate smooth facetOutlineCurve
-    const getSmoothFacetYAtX = (xVal: number): number => {
-      const domain = facetOutlineCurve.domain;
-      const tMin = domain[0];
-      const tMax = domain[1];
-      const tMid = (tMin + tMax) / 2;
+    // Find tPeak of facetOutlineCurve using a ternary search to ensure monotonic X in the search interval
+    const domain = facetOutlineCurve.domain;
+    const tMin = domain[0];
+    const tMax = domain[1];
+    let lowT = tMin;
+    let highT = tMax;
+    for (let iter = 0; iter < 20; iter++) {
+      const t1 = lowT + (highT - lowT) / 3;
+      const t2 = highT - (highT - lowT) / 3;
+      if (facetOutlineCurve.pointAt(t1)[0] < facetOutlineCurve.pointAt(t2)[0]) {
+        lowT = t1;
+      } else {
+        highT = t2;
+      }
+    }
+    const tPeak = (lowT + highT) / 2;
 
+    const X_peak = facetOutlineCurve.pointAt(tPeak)[0];
+
+    // Helper to evaluate normal offset point at t
+    const getOffsetPointAtT = (tVal: number, offsetDist: number): { x: number, y: number } => {
+      const pt = facetOutlineCurve.pointAt(tVal);
+      const px = pt[0];
+      const py = pt[2]; // Z is width
+
+      const dt = (tMax - tMin) * 0.005;
+      const t1 = Math.max(tMin, tVal - dt);
+      const t2 = Math.min(tPeak, tVal + dt);
+      const pt1 = facetOutlineCurve.pointAt(t1);
+      const pt2 = facetOutlineCurve.pointAt(t2);
+
+      const dx = pt2[0] - pt1[0];
+      const dy = pt2[2] - pt1[2]; // Z is width
+      const len = Math.sqrt(dx * dx + dy * dy) || 1.0;
+
+      // Inward normal: since py < 0, inward means pointing in the positive Y direction
+      const nx = -dy / len;
+      const ny = dx / len;
+
+      return {
+        x: px + offsetDist * nx,
+        y: py + offsetDist * ny
+      };
+    };
+
+    const getCockpitBoundaryYAtX = (xVal: number): number => {
+      // Peak offset is at X_peak - 1.0 (since tangent at peak is vertical)
+      const coamingPeakX = X_peak - 1.0;
+      if (xVal >= coamingPeakX) {
+        return 0.0;
+      }
       let low = tMin;
-      let high = tMid;
-
+      let high = tPeak;
       for (let iter = 0; iter < 16; iter++) {
         const t = (low + high) / 2;
-        const pt = facetOutlineCurve.pointAt(t);
-        const px = pt[0];
-
-        if (px < xVal) {
+        const ptOff = getOffsetPointAtT(t, 1.0);
+        if (ptOff.x < xVal) {
           low = t;
         } else {
           high = t;
         }
       }
-      const finalT = (low + high) / 2;
-      const pt = facetOutlineCurve.pointAt(finalT);
-      return Math.abs(pt[2]);
+      const t = (low + high) / 2;
+      return Math.abs(getOffsetPointAtT(t, 1.0).y);
     };
 
-    // Find the exact X where the smooth facet width is 1.0 inch
-    let lowX = cpCenterX;
-    let highX = activeCpEnd;
-    for (let iter = 0; iter < 12; iter++) {
-      const midX = (lowX + highX) / 2;
-      const yVal = getSmoothFacetYAtX(midX);
-      if (yVal > 1.0) {
-        lowX = midX;
-      } else {
-        highX = midX;
-      }
-    }
-    const coamingMaxX = (lowX + highX) / 2;
-
     if (x >= cpCenterX) {
-      // Front half: offset 1" inward from the smooth flat plane outline curve
-      if (x >= coamingMaxX) {
-        return 0.0;
-      }
-      const yVal = getSmoothFacetYAtX(x);
-      return Math.max(0.0, yVal - 1.0);
+      return getCockpitBoundaryYAtX(x);
     } else {
       // Back half: rounded semi-ellipse closed out smoothly from the midpoint
       const xc = x - cpCenterX;
       const a = cpLength / 2;
-      const b = Math.max(0.0, getSmoothFacetYAtX(cpCenterX) - 1.0);
+      const b = Math.max(0.0, getCockpitBoundaryYAtX(cpCenterX));
       const ratio = (xc * xc) / (a * a || 1);
       return ratio < 1.0 ? b * Math.sqrt(1.0 - ratio) : 0.0;
     }
@@ -130,46 +151,26 @@ export class Cockpit extends KayakGeometry {
 
     const coamingHeight = params.coamingHeight !== undefined ? params.coamingHeight : 0.75;
 
-    // Helper to evaluate smooth facetOutlineCurve
-    const getSmoothFacetYAtX = (xVal: number): number => {
-      if (!facetOutlineCurve) return getGunwaleAndDeckHeight(xVal).yFlat;
+    // Find the exact X where the coaming peak should be (offset 1" from the facet outline peak)
+    let coamingMaxX = activeCpEnd - 1.0;
+    if (facetOutlineCurve) {
       const domain = facetOutlineCurve.domain;
       const tMin = domain[0];
       const tMax = domain[1];
-      const tMid = (tMin + tMax) / 2;
-
-      let low = tMin;
-      let high = tMid;
-      for (let iter = 0; iter < 16; iter++) {
-        const t = (low + high) / 2;
-        const pt = facetOutlineCurve.pointAt(t);
-        const px = pt[0];
-        if (px < xVal) {
-          low = t;
+      let lowT = tMin;
+      let highT = tMax;
+      for (let iter = 0; iter < 20; iter++) {
+        const t1 = lowT + (highT - lowT) / 3;
+        const t2 = highT - (highT - lowT) / 3;
+        if (facetOutlineCurve.pointAt(t1)[0] < facetOutlineCurve.pointAt(t2)[0]) {
+          lowT = t1;
         } else {
-          high = t;
+          highT = t2;
         }
       }
-      const finalT = (low + high) / 2;
-      const pt = facetOutlineCurve.pointAt(finalT);
-      return Math.abs(pt[2]);
-    };
-
-    // Find the exact X where the smooth facet width is 1.0 inch
-    let coamingMaxX = activeCpEnd;
-    if (facetOutlineCurve) {
-      let lowX = cpCenterX;
-      let highX = activeCpEnd;
-      for (let iter = 0; iter < 12; iter++) {
-        const midX = (lowX + highX) / 2;
-        const yVal = getSmoothFacetYAtX(midX);
-        if (yVal > 1.0) {
-          lowX = midX;
-        } else {
-          highX = midX;
-        }
-      }
-      coamingMaxX = (lowX + highX) / 2;
+      const tPeak = (lowT + highT) / 2;
+      const X_peak = facetOutlineCurve.pointAt(tPeak)[0];
+      coamingMaxX = X_peak - 1.0;
     }
 
     const L_front = coamingMaxX - cpCenterX;
