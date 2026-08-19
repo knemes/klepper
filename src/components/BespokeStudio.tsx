@@ -15,7 +15,6 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
   const [viewMode, setViewMode] = useState<"perspective" | "plan" | "side">("perspective");
   const [showPhysics, setShowPhysics] = useState<boolean>(true);
   const [showRibs, setShowRibs] = useState<boolean>(true);
-  const [showStrips, setShowStrips] = useState<boolean>(true);
   const [showDimensions, setShowDimensions] = useState<boolean>(true);
   const [selectedRibIndex, setSelectedRibIndex] = useState<number>(3);
   const [expandedSection, setExpandedSection] = useState<string>("dimensions");
@@ -578,14 +577,6 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
           <label className="overlay-toggle">
             <input 
               type="checkbox" 
-              checked={showStrips} 
-              onChange={(e) => setShowStrips(e.target.checked)}
-            />
-            <span>CEDAR STRIPS</span>
-          </label>
-          <label className="overlay-toggle">
-            <input 
-              type="checkbox" 
               checked={showDimensions} 
               onChange={(e) => setShowDimensions(e.target.checked)}
             />
@@ -600,7 +591,6 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
           viewMode={viewMode}
           showPhysics={showPhysics}
           showRibs={showRibs}
-          showStrips={showStrips}
           showDimensions={showDimensions}
           draft={hydrostatics.draft}
           vcb={hydrostatics.vcb}

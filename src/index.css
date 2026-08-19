@@ -301,14 +301,18 @@ body {
 /* Page 3: BESPOKE STUDIO (Configurator split viewport) */
 .main-container {
   display: flex;
-  flex: 1;
-  height: calc(100vh - 100px); /* adjusted for double navbar height */
-  position: relative;
+  position: absolute;
+  top: 100px;
+  bottom: 0;
+  left: 0;
+  right: 0;
   overflow: hidden;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   .main-container {
+    position: relative;
+    top: 0;
     flex-direction: column;
     height: auto;
     overflow: visible;
@@ -327,7 +331,7 @@ body {
   box-sizing: border-box;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   .sidebar {
     width: 100%;
     min-width: 100%;
@@ -494,7 +498,7 @@ input[type="range"]::-moz-range-thumb:hover {
   position: relative;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   .viewport-area {
     height: 500px;
     width: 100%;

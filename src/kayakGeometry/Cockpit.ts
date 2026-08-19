@@ -3,6 +3,8 @@ import { KayakGeometry } from "./KayakGeometry";
 
 export class Cockpit extends KayakGeometry {
   public componentType = "Cockpit";
+  public curve: any = null;
+  private tPeak: number = 0;
 
   constructor(rhino: any) {
     super(rhino);
@@ -27,6 +29,28 @@ export class Cockpit extends KayakGeometry {
     const cpWidth = params.cockpitWidth;
     const cpCenterX = activeCpStart + cpLength / 2;
     const activeCpEnd = activeCpStart + cpLength;
+
+    if (this.curve) {
+      const domain = this.curve.domain;
+      const tMin = domain[0];
+      const tPeak = this.tPeak;
+      const xPeak = this.curve.pointAt(tPeak)[0];
+      if (x < activeCpStart || x > xPeak) return 0.0;
+
+      let low = tMin;
+      let high = tPeak;
+      for (let iter = 0; iter < 16; iter++) {
+        const t = (low + high) / 2;
+        const px = this.curve.pointAt(t)[0];
+        if (px < x) {
+          low = t;
+        } else {
+          high = t;
+        }
+      }
+      const finalT = (low + high) / 2;
+      return Math.abs(this.curve.pointAt(finalT)[2]);
+    }
 
     if (!facetOutlineCurve) {
       // Fallback if curve not available
@@ -114,8 +138,24 @@ export class Cockpit extends KayakGeometry {
       const xc = x - cpCenterX;
       const a = cpLength / 2;
       const b = Math.max(0.0, getCockpitBoundaryYAtX(cpCenterX));
+      if (b <= 0.0) return 0.0;
+
+      // Calculate tangent slope of the front half at cpCenterX to match it smoothly
+      let S_front = 0.0;
+      const coamingPeakX = X_peak - 1.0;
+      if (coamingPeakX > cpCenterX) {
+        const dx = Math.min(0.05, (coamingPeakX - cpCenterX) * 0.1);
+        const yCenter = b;
+        const yForward = getCockpitBoundaryYAtX(cpCenterX + dx);
+        S_front = (yForward - yCenter) / dx;
+      }
+
+      // Smoothly interpolate the width using the tangent
       const ratio = (xc * xc) / (a * a || 1);
-      return ratio < 1.0 ? b * Math.sqrt(1.0 - ratio) : 0.0;
+      if (ratio >= 1.0) return 0.0;
+
+      const widthFactor = Math.exp((S_front * xc) / b);
+      return b * widthFactor * Math.sqrt(1.0 - ratio);
     }
   }
 
@@ -235,5 +275,78 @@ export class Cockpit extends KayakGeometry {
       normals: new Float32Array(coamingVertices.length), // calculated inside Three.js
       uvs: new Float32Array(uvs)
     };
+  }
+
+  /**
+   * Constructs the closed 3D NURBS curve outlining the cockpit opening.
+   * Lies exactly on the tilted deck facet plane.
+   */
+  public buildCurve(
+    params: KayakParameters,
+    facetOutlineCurve: any,
+    getPlaneZ: (x: number) => number
+  ) {
+    const activeCpStart = params.cockpitStart;
+    const activeCpEnd = activeCpStart + params.cockpitLength;
+
+    // Find the exact X where the coaming peak is
+    let coamingMaxX = activeCpEnd - 1.0;
+    if (facetOutlineCurve) {
+      const domain = facetOutlineCurve.domain;
+      const tMin = domain[0];
+      const tMax = domain[1];
+      let lowT = tMin;
+      let highT = tMax;
+      for (let iter = 0; iter < 20; iter++) {
+        const t1 = lowT + (highT - lowT) / 3;
+        const t2 = highT - (highT - lowT) / 3;
+        if (facetOutlineCurve.pointAt(t1)[0] < facetOutlineCurve.pointAt(t2)[0]) {
+          lowT = t1;
+        } else {
+          highT = t2;
+        }
+      }
+      const tPeak = (lowT + highT) / 2;
+      const X_peak = facetOutlineCurve.pointAt(tPeak)[0];
+      coamingMaxX = X_peak - 1.0;
+    }
+
+    const pts = new this.rhino.Point3dList();
+    const numPoints = 80; // High resolution for smooth trimming
+
+    // 1. Left boundary points (stepping forward, y < 0)
+    for (let i = 0; i <= numPoints; i++) {
+      const pct = i / numPoints;
+      // Cosine spacing to cluster points near the ends where curvature is highest
+      const t = (1.0 - Math.cos(pct * Math.PI)) / 2.0;
+      const x = activeCpStart + t * (coamingMaxX - activeCpStart);
+      const planeZ = getPlaneZ(x);
+      const yVal = this.getCockpitBoundaryY(x, params, facetOutlineCurve);
+      pts.add(x, planeZ, -yVal);
+    }
+
+    // 2. Right boundary points (stepping backward, y > 0)
+    for (let i = numPoints; i >= 0; i--) {
+      const pct = i / numPoints;
+      const t = (1.0 - Math.cos(pct * Math.PI)) / 2.0;
+      const x = activeCpStart + t * (coamingMaxX - activeCpStart);
+      const planeZ = getPlaneZ(x);
+      const yVal = this.getCockpitBoundaryY(x, params, facetOutlineCurve);
+      pts.add(x, planeZ, yVal);
+    }
+
+    // 3. Close the curve by adding the start point
+    const startPlaneZ = getPlaneZ(activeCpStart);
+    pts.add(activeCpStart, startPlaneZ, 0.0);
+
+    // Create closed cubic NURBS curve
+    this.curve = this.rhino.NurbsCurve.create(false, 3, pts);
+    pts.delete();
+
+    // Find tPeak of this.curve (where X is maximum)
+    if (this.curve) {
+      const domain = this.curve.domain;
+      this.tPeak = (domain[0] + domain[1]) / 2;
+    }
   }
 }

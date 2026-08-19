@@ -58,6 +58,7 @@ export class KayakBuilder {
 
     // Build the closed NURBS outline curve of the flat deck facet
     this.buildFacetOutline();
+    this.cockpit.buildCurve(this.params, this.facetOutlineCurve, (xVal: number) => this.sternDeckZ + xVal * this.slope);
   }
 
   /**
@@ -261,7 +262,10 @@ export class KayakBuilder {
           const boundaryY = this.cockpit.getCockpitBoundaryY(x, this.params, this.facetOutlineCurve);
           const activeBoundaryY = boundaryY;
 
-          if (absY < activeBoundaryY) {
+          const centerlineOffset = gunwaleY / (vSegments || 1);
+          const clampThreshold = Math.max(activeBoundaryY, centerlineOffset * 1.1);
+
+          if (absY < clampThreshold) {
             vy = vy < 0 ? -activeBoundaryY : activeBoundaryY;
             vz = planeZ; // boundaries sit on flat trim plane
           }
@@ -297,10 +301,34 @@ export class KayakBuilder {
         const nextXvy = -nextGunwaleY + 2.0 * nextGunwaleY * vPct;
         const nextXnextVy = -nextGunwaleY + 2.0 * nextGunwaleY * nextVPct;
 
-        const isInsideU = inCpU && (vy >= -boundaryY && nextVy <= boundaryY);
-        const isInsideNextU = inCpNextU && (nextXvy >= -nextBoundaryY && nextXnextVy <= nextBoundaryY);
+        // Evaluate the vertices AFTER clamping to see if the quad's center is inside the cockpit curve
+        let yA = vy;
+        let yB = nextVy;
+        let yC = nextXvy;
+        let yD = nextXnextVy;
 
-        if (isInsideU && isInsideNextU) {
+        const centerlineOffset = gunwaleY / (vSegments || 1);
+        const clampThresholdU = Math.max(boundaryY, centerlineOffset * 1.1);
+        const nextCenterlineOffset = nextGunwaleY / (vSegments || 1);
+        const clampThresholdNextU = Math.max(nextBoundaryY, nextCenterlineOffset * 1.1);
+
+        if (inCpU) {
+          if (Math.abs(yA) < clampThresholdU) yA = yA < 0 ? -boundaryY : boundaryY;
+          if (Math.abs(yB) < clampThresholdU) yB = yB < 0 ? -boundaryY : boundaryY;
+        }
+        if (inCpNextU) {
+          if (Math.abs(yC) < clampThresholdNextU) yC = yC < 0 ? -nextBoundaryY : nextBoundaryY;
+          if (Math.abs(yD) < clampThresholdNextU) yD = yD < 0 ? -nextBoundaryY : nextBoundaryY;
+        }
+
+        const xCenter = (x + nextX) / 2;
+        const yCenter = (yA + yB + yC + yD) / 4;
+        const inCpCenter = xCenter >= activeCpStart && xCenter <= activeCpEnd;
+        const boundaryYCenter = inCpCenter ? this.cockpit.getCockpitBoundaryY(xCenter, this.params, this.facetOutlineCurve) : 0.0;
+
+        const isInsideCenter = inCpCenter && (Math.abs(yCenter) < boundaryYCenter);
+
+        if (isInsideCenter) {
           continue; // Skip drawing in the cockpit opening
         }
 
@@ -463,6 +491,7 @@ export class KayakBuilder {
     if (this.gunwale.leftCurve) file.objects().addCurve(this.gunwale.leftCurve);
     if (this.gunwale.rightCurve) file.objects().addCurve(this.gunwale.rightCurve);
     if (this.facetOutlineCurve) file.objects().addCurve(this.facetOutlineCurve);
+    if (this.cockpit.curve) file.objects().addCurve(this.cockpit.curve);
 
     // 2. Write all structural transverse rib curves
     const stations = this.generateStations(0);
@@ -592,7 +621,7 @@ export class KayakBuilder {
    */
   public buildFacetOutline() {
     const pts = new this.rhino.Point3dList();
-    
+
     // Generate sparse sampling coordinates at the actual section stations
     const xVals: number[] = [];
     if (this.sectionsImporter && this.sectionsImporter.hasData()) {
@@ -617,11 +646,11 @@ export class KayakBuilder {
       const yFlat = this.getFlatPlaneWidth(x, planeZ, Math.abs(gunLeft.y), dPtUntrimmed.z);
       pts.add(x, planeZ, -yFlat);
     }
-    
+
     // Peak vertex
     const peakZ = this.sternDeckZ + this.facetStartX * this.slope;
     pts.add(this.facetStartX, peakZ, 0.0);
-    
+
     // 2. Right boundary points (stepping backward)
     for (let i = xVals.length - 1; i >= 0; i--) {
       const x = xVals[i];
@@ -631,14 +660,14 @@ export class KayakBuilder {
       const yFlat = this.getFlatPlaneWidth(x, planeZ, Math.abs(gunLeft.y), dPtUntrimmed.z);
       pts.add(x, planeZ, yFlat);
     }
-    
+
     // 3. Close the curve by adding the start point
     const startPlaneZ = this.sternDeckZ;
     const startGunLeft = this.gunwale.getLeftPointAtX(0);
     const startDPtUntrimmed = this.deckLine.getUntrimmedPointAtX(0);
     const startYFlat = this.getFlatPlaneWidth(0, startPlaneZ, Math.abs(startGunLeft.y), startDPtUntrimmed.z);
     pts.add(0, startPlaneZ, -startYFlat);
-    
+
     // Create cubic NURBS curve
     this.facetOutlineCurve = this.rhino.NurbsCurve.create(false, 3, pts);
     pts.delete();
