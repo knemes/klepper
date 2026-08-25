@@ -62,10 +62,6 @@ export class Gunwale extends KayakGeometry {
    * Evaluates the gunwale point on the left side at a given X.
    */
   public getLeftPointAtX(targetX: number): { x: number; y: number; z: number } {
-    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-      const y = -this.sectionsImporter.getGunwaleY(targetX);
-      return { x: targetX, y, z: this.sectionsImporter.getHullZ(targetX, y) };
-    }
     return this.getPointAtX(this.leftCurve, targetX);
   }
 
@@ -73,10 +69,6 @@ export class Gunwale extends KayakGeometry {
    * Evaluates the gunwale point on the right side at a given X.
    */
   public getRightPointAtX(targetX: number): { x: number; y: number; z: number } {
-    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-      const y = this.sectionsImporter.getGunwaleY(targetX);
-      return { x: targetX, y, z: this.sectionsImporter.getHullZ(targetX, y) };
-    }
     return this.getPointAtX(this.rightCurve, targetX);
   }
 

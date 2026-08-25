@@ -17,7 +17,7 @@ export class DeckLine extends KayakGeometry {
     this.totalHeight = params.totalHeight;
     this.L = params.length * 12;
     this.sternDeckZ = params.hullHeight;
-    this.bowDeckZ = params.hullHeight + 2.0;
+    this.bowDeckZ = params.hullHeight;
     this.buildCurve(params);
   }
 
@@ -26,7 +26,7 @@ export class DeckLine extends KayakGeometry {
     const th = params.totalHeight;
     const peakX = L * params.deckLongitudinalPeak;
     const sternZ = params.hullHeight;
-    const bowZ = params.hullHeight + 2.0;
+    const bowZ = params.hullHeight;
 
     const pts = new this.rhino.Point3dList();
     pts.add(0, 0, sternZ);
@@ -48,7 +48,7 @@ export class DeckLine extends KayakGeometry {
     this.sternDeckZ = sternDeckZ;
     this.totalHeight = params.totalHeight;
     this.L = params.length * 12;
-    this.bowDeckZ = params.hullHeight + 2.0;
+    this.bowDeckZ = params.hullHeight;
 
     const pts = new this.rhino.Point3dList();
     pts.add(0, 0, this.sternDeckZ);
@@ -65,7 +65,8 @@ export class DeckLine extends KayakGeometry {
    */
   public getPointAtX(targetX: number): { x: number; y: number; z: number } {
     if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-      const z_untrimmed = this.sectionsImporter.getDeckCenterlineZ(targetX);
+      const z_offset = this.sternDeckZ - 8.0;
+      const z_untrimmed = this.sectionsImporter.getDeckCenterlineZ(targetX) + z_offset;
       const isTrimmedZone = targetX <= this.facetStartX;
       if (isTrimmedZone) {
         const planeZ = this.sternDeckZ + targetX * this.slope;
@@ -91,7 +92,8 @@ export class DeckLine extends KayakGeometry {
    */
   public getUntrimmedPointAtX(targetX: number): { x: number; y: number; z: number } {
     if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-      return { x: targetX, y: 0, z: this.sectionsImporter.getDeckCenterlineZ(targetX) };
+      const z_offset = this.sternDeckZ - 8.0;
+      return { x: targetX, y: 0, z: this.sectionsImporter.getDeckCenterlineZ(targetX) + z_offset };
     }
 
     if (targetX > this.facetStartX) {

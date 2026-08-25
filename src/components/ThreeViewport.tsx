@@ -562,11 +562,6 @@ export default function ThreeViewport({
       group.add(dimensionsLabel);
     }
 
-    // Camera target update
-    if (viewModeRef.current === "perspective" && controlsRef.current) {
-      controlsRef.current.target.set(lcbRef.current - halfL, currentParams.hullHeight / 3, 0);
-      controlsRef.current.update();
-    }
   };
 
   return <div ref={mountRef} className="canvas-container" />;

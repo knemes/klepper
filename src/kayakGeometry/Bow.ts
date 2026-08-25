@@ -13,7 +13,7 @@ export class Bow extends KayakGeometry {
   private buildCurve(params: KayakParameters) {
     const bl = params.bowLength;
     const hh = params.hullHeight;
-    const bowHeight = hh + 2.0; // The bow stem tip rises slightly higher than the hull sheer line.
+    const bowHeight = hh; // The bow stem tip meets the hull sheer line at the top.
 
     const pts = new this.rhino.Point3dList();
     pts.add(0, 0, 0); // Start of stem at keel bottom

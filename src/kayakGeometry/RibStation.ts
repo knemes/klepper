@@ -40,7 +40,8 @@ export class RibStation extends KayakGeometry {
     facetStartX = 0,
     slope = 0,
     deckPtUntrimmed?: Point3D,
-    sectionsImporter?: any
+    sectionsImporter?: any,
+    skipRhinoCurves = false
   ) {
     super(rhino);
     this.x = x;
@@ -53,13 +54,13 @@ export class RibStation extends KayakGeometry {
     this.deckPtUntrimmed = deckPtUntrimmed || deckPt;
     this.sectionsImporter = sectionsImporter;
 
-    this.buildSectionCurves(params);
+    this.buildSectionCurves(params, skipRhinoCurves);
     if (draft > 0) {
       this.calculateSubmergedArea(draft);
     }
   }
 
-  private buildSectionCurves(params: KayakParameters) {
+  private buildSectionCurves(params: KayakParameters, skipRhinoCurves = false) {
     const segments = 32;
     const gY = Math.abs(this.gunwaleLeft.y); // half-beam width
     const keelZ = this.keelPt.z;
@@ -83,16 +84,8 @@ export class RibStation extends KayakGeometry {
     const leftHullList = new this.rhino.Point3dList();
     for (let i = 0; i <= segments; i++) {
       const t = i / segments;
-      let hY: number;
-      let hZ: number;
-
-      if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-        hY = -gY * t;
-        hZ = this.sectionsImporter.getHullZ(this.x, hY);
-      } else {
-        hY = evaluateBezier1D(0, hullCPY, -gY, t);
-        hZ = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
-      }
+      const hY = evaluateBezier1D(0, hullCPY, -gY, t);
+      const hZ = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
 
       this.hullCurveLeft.push({ x: this.x, y: hY, z: hZ });
       leftHullList.add(this.x, hY, hZ);
@@ -112,14 +105,8 @@ export class RibStation extends KayakGeometry {
       const t = i / segments;
       const dY = -gY + gY * t;
       const absY = Math.abs(dY);
-
-      let dZ = 0;
-      if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-        dZ = this.sectionsImporter.getDeckZ(this.x, dY);
-      } else {
-        const yPct = absY / (gY || 1.0);
-        dZ = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
-      }
+      const yPct = absY / (gY || 1.0);
+      let dZ = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
 
       if (isTrimmedZone) {
         dZ = Math.min(dZ, currentPlaneZ);
@@ -134,14 +121,8 @@ export class RibStation extends KayakGeometry {
       const t = i / segments;
       const dY = gY * t;
       const absY = Math.abs(dY);
-
-      let dZ = 0;
-      if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-        dZ = this.sectionsImporter.getDeckZ(this.x, dY);
-      } else {
-        const yPct = absY / (gY || 1.0);
-        dZ = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
-      }
+      const yPct = absY / (gY || 1.0);
+      let dZ = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
 
       if (isTrimmedZone) {
         dZ = Math.min(dZ, currentPlaneZ);
@@ -155,16 +136,8 @@ export class RibStation extends KayakGeometry {
     const rightHullList = new this.rhino.Point3dList();
     for (let i = 0; i <= segments; i++) {
       const t = i / segments;
-      let hY: number;
-      let hZ: number;
-
-      if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-        hY = gY - gY * t;
-        hZ = this.sectionsImporter.getHullZ(this.x, hY);
-      } else {
-        hY = evaluateBezier1D(gY, -hullCPY, 0, t);
-        hZ = evaluateBezier1D(gunwaleZ, hullCPZ, keelZ, t);
-      }
+      const hY = evaluateBezier1D(gY, -hullCPY, 0, t);
+      const hZ = evaluateBezier1D(gunwaleZ, hullCPZ, keelZ, t);
 
       this.hullCurveRight.push({ x: this.x, y: hY, z: hZ });
       rightHullList.add(this.x, hY, hZ);
@@ -179,20 +152,22 @@ export class RibStation extends KayakGeometry {
       ...this.hullCurveRight.slice(1)
     ];
 
-    // Create Rhino NURBS curves for each quadrant
-    this.rhinoHullCurveLeft = this.rhino.NurbsCurve.create(false, 3, leftHullList);
-    this.rhinoDeckCurveLeft = this.rhino.NurbsCurve.create(false, 3, leftDeckList);
-    this.rhinoDeckCurveRight = this.rhino.NurbsCurve.create(false, 3, rightDeckList);
-    this.rhinoHullCurveRight = this.rhino.NurbsCurve.create(false, 3, rightHullList);
+    // Create Rhino NURBS curves if requested (skipped during high-frequency calculations to prevent WASM leaks)
+    if (!skipRhinoCurves && this.rhino) {
+      this.rhinoHullCurveLeft = this.rhino.NurbsCurve.create(false, 3, leftHullList);
+      this.rhinoDeckCurveLeft = this.rhino.NurbsCurve.create(false, 3, leftDeckList);
+      this.rhinoDeckCurveRight = this.rhino.NurbsCurve.create(false, 3, rightDeckList);
+      this.rhinoHullCurveRight = this.rhino.NurbsCurve.create(false, 3, rightHullList);
 
-    // Create a single closed Rhino NURBS curve for the rib station
-    const closedList = new this.rhino.Point3dList();
-    for (const p of this.closedProfile) {
-      closedList.add(p.x, p.y, p.z);
+      // Create a single closed Rhino NURBS curve for the rib station
+      const closedList = new this.rhino.Point3dList();
+      for (const p of this.closedProfile) {
+        closedList.add(p.x, p.y, p.z);
+      }
+      // Add start point to close the NURBS loop
+      closedList.add(this.closedProfile[0].x, this.closedProfile[0].y, this.closedProfile[0].z);
+      this.rhinoClosedCurve = this.rhino.NurbsCurve.create(false, 3, closedList);
     }
-    // Add start point to close the NURBS loop
-    closedList.add(this.closedProfile[0].x, this.closedProfile[0].y, this.closedProfile[0].z);
-    this.rhinoClosedCurve = this.rhino.NurbsCurve.create(false, 3, closedList);
   }
 
   private calculateSubmergedArea(draft: number) {

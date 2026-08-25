@@ -167,21 +167,16 @@ export class KayakBuilder {
         let vy: number;
         let vz: number;
 
-        if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-          vy = -gunwaleY + 2.0 * gunwaleY * vPct;
-          vz = this.sectionsImporter.getHullZ(x, vy);
+        if (vPct <= 0.5) {
+          // Left side: sweeps from Port Gunwale (-gunwaleY) to Keel (0)
+          const t = 1.0 - (vPct / 0.5);
+          vy = evaluateBezier1D(0, hullCPY, -gunwaleY, t);
+          vz = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
         } else {
-          if (vPct <= 0.5) {
-            // Left side: sweeps from Port Gunwale (-gunwaleY) to Keel (0)
-            const t = 1.0 - (vPct / 0.5);
-            vy = evaluateBezier1D(0, hullCPY, -gunwaleY, t);
-            vz = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
-          } else {
-            // Right side: sweeps from Keel (0) to Starboard Gunwale (+gunwaleY)
-            const t = (vPct - 0.5) / 0.5;
-            vy = evaluateBezier1D(0, -hullCPY, gunwaleY, t);
-            vz = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
-          }
+          // Right side: sweeps from Keel (0) to Starboard Gunwale (+gunwaleY)
+          const t = (vPct - 0.5) / 0.5;
+          vy = evaluateBezier1D(0, -hullCPY, gunwaleY, t);
+          vz = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
         }
 
         vertices.push(x, vz, vy); // X=length, Y=height, Z=width
@@ -255,13 +250,8 @@ export class KayakBuilder {
         const absY = Math.abs(vy);
 
         // Evaluate the original untrimmed deck height
-        let vz = deckZ_untrimmed;
-        if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-          vz = this.sectionsImporter.getDeckZ(x, vy);
-        } else {
-          const yPct = absY / (gunwaleY || 1.0);
-          vz = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
-        }
+        const yPct = absY / (gunwaleY || 1.0);
+        let vz = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
 
         // Trim the top of the rib/deck with the plane (leaves side arcs untouched)
         if (isTrimmedZone) {
@@ -387,9 +377,9 @@ export class KayakBuilder {
     let waterplaneMomentOfInertia = 0;
     let wettedSurfaceArea = 0;
 
-    const dx = 2.0; // 2-inch integration slices
+    const dx = 3.0; // 3-inch integration slices
 
-    for (let iter = 0; iter < 30; iter++) {
+    for (let iter = 0; iter < 16; iter++) {
       displacementVolume = 0;
       let volumeMomentX = 0;
       let volumeMomentZ = 0;
@@ -417,7 +407,8 @@ export class KayakBuilder {
           this.facetStartX,
           this.slope,
           deckPtUntrimmed,
-          this.sectionsImporter
+          this.sectionsImporter,
+          true // skipRhinoCurves = true
         );
 
         const area = station.areaSubmerged;
@@ -557,33 +548,13 @@ export class KayakBuilder {
    * Otherwise, falls back to the parametric curve equation.
    */
   public getFlatPlaneWidth(x: number, planeZ: number, gunwaleY: number, deckZ_untrimmed: number): number {
-    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-      let yMin = 0.0;
-      let yMax = gunwaleY;
-      let yMid = 0.0;
+    const gunwaleZ = this.gunwale.getLeftPointAtX(x).z;
+    if (planeZ >= deckZ_untrimmed) return 0.0;
+    if (planeZ <= gunwaleZ) return gunwaleY;
 
-      const centerZ = this.sectionsImporter.getDeckCenterlineZ(x);
-      if (planeZ >= centerZ) return 0.0; // trimming plane is above the deck crown
-
-      // 12 iterations gives sub-millimeter precision along the beam
-      for (let iter = 0; iter < 12; iter++) {
-        yMid = (yMin + yMax) / 2;
-        const z = this.sectionsImporter.getDeckZ(x, yMid);
-        if (z > planeZ) {
-          // Since the deck curves down as we move away from centerline, a Z > planeZ
-          // means we are still inside the flat plane zone. Increase Y.
-          yMin = yMid;
-        } else {
-          yMax = yMid;
-        }
-      }
-      return yMid;
-    } else {
-      const gunwaleZ = 8.0; // planar gunwale height
-      const pPower = 1.0 + this.params.deckVerticalCurvature * 2.2;
-      const yPctInt = Math.max(0, Math.min(1, (deckZ_untrimmed - planeZ) / (deckZ_untrimmed - gunwaleZ || 1)));
-      return Math.pow(yPctInt, 1.0 / pPower) * gunwaleY;
-    }
+    const pPower = 1.0 + this.params.deckVerticalCurvature * 2.2;
+    const yPctInt = Math.max(0, Math.min(1, (deckZ_untrimmed - planeZ) / (deckZ_untrimmed - gunwaleZ || 1)));
+    return Math.pow(yPctInt, 1.0 / pPower) * gunwaleY;
   }
 
   public getSmoothFacetYAtX(xVal: number): number {

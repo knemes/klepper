@@ -70,6 +70,13 @@ export default function App() {
       const next = { ...prev, [key]: value };
       
       // Validation constraints
+      if (key === "beam") {
+        next.beam = Math.max(18, Math.min(36, value));
+      }
+      if (key === "beamPlacement") {
+        next.beamPlacement = Math.max(0.25, Math.min(0.75, value));
+      }
+
       if (key === "hullHeight" && next.totalHeight <= value) {
         next.totalHeight = value + 2.5;
       }

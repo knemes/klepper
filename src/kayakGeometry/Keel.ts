@@ -51,10 +51,6 @@ export class Keel extends KayakGeometry {
    * Uses simple bisection along the curve domain to find the point where X matches.
    */
   public getPointAtX(targetX: number): { x: number; y: number; z: number } {
-    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-      return { x: targetX, y: 0, z: this.sectionsImporter.getKeelZ(targetX) };
-    }
-
     if (!this.curve) return { x: targetX, y: 0, z: 0 };
     
     const domain = this.curve.domain;

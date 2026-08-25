@@ -12,6 +12,9 @@ interface Section {
   hullPoints: SectionPoint[];
   deckPoints: SectionPoint[];
   width: number;
+  minZ: number;
+  gunZ: number;
+  maxZ: number;
 }
 
 export class SectionsImporter {
@@ -35,13 +38,24 @@ export class SectionsImporter {
             gunwaleRight: defaultPt,
             hullPoints: [defaultPt],
             deckPoints: [defaultPt],
-            width: 0.001
+            width: 0.001,
+            minZ: 8.0,
+            gunZ: 8.0,
+            maxZ: 8.0
           };
         }
 
         const gunwaleLeft = sorted[0];
         const gunwaleRight = sorted[sorted.length - 1];
         const width = Math.max(0.001, Math.abs(gunwaleLeft.y), Math.abs(gunwaleRight.y));
+
+        let minZ = Infinity;
+        let maxZ = -Infinity;
+        for (const p of sorted) {
+          if (p.z < minZ) minZ = p.z;
+          if (p.z > maxZ) maxZ = p.z;
+        }
+        const gunZ = (gunwaleLeft.z + gunwaleRight.z) / 2.0;
 
         const getRefZ = (y: number) => {
           const span = gunwaleRight.y - gunwaleLeft.y || 1.0;
@@ -76,7 +90,10 @@ export class SectionsImporter {
           gunwaleRight,
           hullPoints,
           deckPoints,
-          width
+          width,
+          minZ,
+          gunZ,
+          maxZ
         };
       });
 
@@ -91,7 +108,10 @@ export class SectionsImporter {
           gunwaleRight: sternPt,
           hullPoints: [sternPt],
           deckPoints: [sternPt],
-          width: 0.001
+          width: 0.001,
+          minZ: 8.0,
+          gunZ: 8.0,
+          maxZ: 8.0
         });
       }
 
@@ -155,16 +175,65 @@ export class SectionsImporter {
   }
 
   /**
-   * Evaluates the hull height at a given X and Y.
+   * Evaluates the normalized vertical hull ratio [0, 1] at a given X and Y.
+   * 0.0 corresponds to the Keel (bottom), 1.0 corresponds to the Gunwale (sheer).
    */
-  public getHullZ(x: number, y: number): number {
+  public getHullRatio(x: number, y: number, localGunwaleY?: number): number {
+    const neighbors = this.getNeighboringSections(x);
+    if (!neighbors) return Math.min(1.0, Math.abs(y) / (localGunwaleY || 1.0));
+
+    const { s0, s1, t } = neighbors;
+    const W_x = localGunwaleY !== undefined ? localGunwaleY : this.getGunwaleY(x);
+    const pct = y / (W_x || 1.0);
+
+    const y0 = pct * s0.width;
+    const y1 = pct * s1.width;
+
+    const z0 = this.interpolateZForY(s0.hullPoints, y0);
+    const z1 = this.interpolateZForY(s1.hullPoints, y1);
+
+    const r0 = Math.max(0.0, Math.min(1.0, (z0 - s0.minZ) / (s0.gunZ - s0.minZ || 1.0)));
+    const r1 = Math.max(0.0, Math.min(1.0, (z1 - s1.minZ) / (s1.gunZ - s1.minZ || 1.0)));
+
+    return r0 + (r1 - r0) * t;
+  }
+
+  /**
+   * Evaluates the normalized vertical deck ratio [0, 1] at a given X and Y.
+   * 0.0 corresponds to the Gunwale (sheer line), 1.0 corresponds to the Deck Peak (crown).
+   */
+  public getDeckRatio(x: number, y: number, localGunwaleY?: number): number {
+    const neighbors = this.getNeighboringSections(x);
+    if (!neighbors) {
+      const p = Math.abs(y) / (localGunwaleY || 1.0);
+      return Math.max(0.0, 1.0 - p);
+    }
+
+    const { s0, s1, t } = neighbors;
+    const W_x = localGunwaleY !== undefined ? localGunwaleY : this.getGunwaleY(x);
+    const pct = y / (W_x || 1.0);
+
+    const y0 = pct * s0.width;
+    const y1 = pct * s1.width;
+
+    const z0 = this.interpolateZForY(s0.deckPoints, y0);
+    const z1 = this.interpolateZForY(s1.deckPoints, y1);
+
+    const r0 = Math.max(0.0, Math.min(1.0, (z0 - s0.gunZ) / (s0.maxZ - s0.gunZ || 1.0)));
+    const r1 = Math.max(0.0, Math.min(1.0, (z1 - s1.gunZ) / (s1.maxZ - s1.gunZ || 1.0)));
+
+    return r0 + (r1 - r0) * t;
+  }
+
+  /**
+   * Evaluates the absolute hull height from the raw scan at a given X and Y.
+   */
+  public getHullZ(x: number, y: number, localGunwaleY?: number): number {
     const neighbors = this.getNeighboringSections(x);
     if (!neighbors) return 0.0;
 
     const { s0, s1, t } = neighbors;
-
-    // Proportional Y interpolation based on local section beam boundaries
-    const W_x = this.getGunwaleY(x);
+    const W_x = localGunwaleY !== undefined ? localGunwaleY : this.getGunwaleY(x);
     const pct = y / (W_x || 1.0);
 
     const y0 = pct * s0.width;
@@ -177,16 +246,14 @@ export class SectionsImporter {
   }
 
   /**
-   * Evaluates the deck height at a given X and Y.
+   * Evaluates the absolute deck height from the raw scan at a given X and Y.
    */
-  public getDeckZ(x: number, y: number): number {
+  public getDeckZ(x: number, y: number, localGunwaleY?: number): number {
     const neighbors = this.getNeighboringSections(x);
     if (!neighbors) return 8.0;
 
     const { s0, s1, t } = neighbors;
-
-    // Proportional Y interpolation based on local section beam boundaries
-    const W_x = this.getGunwaleY(x);
+    const W_x = localGunwaleY !== undefined ? localGunwaleY : this.getGunwaleY(x);
     const pct = y / (W_x || 1.0);
 
     const y0 = pct * s0.width;

@@ -126,8 +126,8 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
                 </div>
                 <input 
                   type="range" 
-                  min="0.35" 
-                  max="0.65" 
+                  min="0.25" 
+                  max="0.75" 
                   step="0.01" 
                   value={params.beamPlacement} 
                   onChange={(e) => onParamChange("beamPlacement", parseFloat(e.target.value))}
@@ -141,8 +141,8 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
                 </div>
                 <input 
                   type="range" 
-                  min="8" 
-                  max="15" 
+                  min="6" 
+                  max="16" 
                   step="0.1" 
                   value={params.hullHeight} 
                   onChange={(e) => onParamChange("hullHeight", parseFloat(e.target.value))}
@@ -156,7 +156,7 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
                 </div>
                 <input 
                   type="range" 
-                  min="12" 
+                  min="8" 
                   max="24" 
                   step="0.1" 
                   value={params.totalHeight} 
