@@ -283,24 +283,24 @@ export default function ThreeViewport({
 
 
 
-    // Elegant materials reflecting premium Rhino-shaded CAD mode
+    // Elegant materials: Option A (Scandinavian Birch & Clay CAD palette)
     const hullMaterial = new THREE.MeshStandardMaterial({
-      color: 0x1f362c,      // Shaded dark forest green
-      roughness: 0.22,
-      metalness: 0.12,
+      color: 0xb0b9b3,      // Warm Pewter / Pale Satin Slate
+      roughness: 0.30,
+      metalness: 0.06,
       side: THREE.DoubleSide,
       flatShading: false,
     });
 
     const deckMaterial = new THREE.MeshStandardMaterial({
-      color: 0x7b9c7b,      // Premium sage deck green
-      roughness: 0.35,
-      metalness: 0.08,
+      color: 0xe2e8e4,      // Chalk Satin / Off-White Clay
+      roughness: 0.38,
+      metalness: 0.04,
       side: THREE.DoubleSide,
     });
 
     const technicalLineMaterial = new THREE.LineBasicMaterial({
-      color: 0x14231a,      // Dark pine shadow outline
+      color: 0x181e1a,      // Deep Charcoal
       linewidth: 1.5,
       transparent: true,
       opacity: 0.85
@@ -373,9 +373,9 @@ export default function ThreeViewport({
     coamingGeo.computeVertexNormals();
 
     const coamingMaterial = new THREE.MeshStandardMaterial({
-      color: 0x3d2314, // Rich mahogany
-      roughness: 0.28,
-      metalness: 0.1,
+      color: 0x422918, // Rich Walnut
+      roughness: 0.32,
+      metalness: 0.08,
       side: THREE.DoubleSide
     });
 
@@ -453,34 +453,19 @@ export default function ThreeViewport({
     const dcLine = new THREE.Line(dcGeo, technicalLineMaterial);
     group.add(dcLine);
 
-    // 5. Render Plywood Stations/Ribs
+    // 5. Render Plywood Stations/Ribs (Continuous Closed Profile Curves)
     if (showRibsRef.current) {
       const stations = builder.generateStations(0);
       const ribMaterial = new THREE.LineBasicMaterial({
-        color: 0x14231a,
+        color: 0x111614, // Deep Charcoal / Jet Black
         linewidth: 2,
       });
 
       stations.forEach((st) => {
         const xOffset = st.x - halfL;
-
-        // Hull curve lines
-        const hlPts = st.hullCurveLeft.map(p => new THREE.Vector3(xOffset, p.z, p.y));
-        const hlGeo = new THREE.BufferGeometry().setFromPoints(hlPts);
-        group.add(new THREE.Line(hlGeo, ribMaterial));
-
-        const hrPts = st.hullCurveRight.map(p => new THREE.Vector3(xOffset, p.z, p.y));
-        const hrGeo = new THREE.BufferGeometry().setFromPoints(hrPts);
-        group.add(new THREE.Line(hrGeo, ribMaterial));
-
-        // Deck curve lines
-        const dlPts = st.deckCurveLeft.map(p => new THREE.Vector3(xOffset, p.z, p.y));
-        const dlGeo = new THREE.BufferGeometry().setFromPoints(dlPts);
-        group.add(new THREE.Line(dlGeo, ribMaterial));
-
-        const drPts = st.deckCurveRight.map(p => new THREE.Vector3(xOffset, p.z, p.y));
-        const drGeo = new THREE.BufferGeometry().setFromPoints(drPts);
-        group.add(new THREE.Line(drGeo, ribMaterial));
+        const pts = st.closedProfile.map(p => new THREE.Vector3(xOffset, p.z, p.y));
+        const ribGeo = new THREE.BufferGeometry().setFromPoints(pts);
+        group.add(new THREE.LineLoop(ribGeo, ribMaterial));
       });
     }
 
@@ -585,16 +570,4 @@ export default function ThreeViewport({
   };
 
   return <div ref={mountRef} className="canvas-container" />;
-}
-group.add(dimensionsLabel);
-    }
-
-// Camera target update
-if (viewModeRef.current === "perspective" && controlsRef.current) {
-  controlsRef.current.target.set(lcbRef.current - halfL, currentParams.hullHeight / 3, 0);
-  controlsRef.current.update();
-}
-  };
-
-return <div ref={mountRef} className="canvas-container" />;
 }

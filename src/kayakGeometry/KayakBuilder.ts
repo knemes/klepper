@@ -102,12 +102,42 @@ export class KayakBuilder {
   }
 
   /**
+   * Evaluates longitudinal station X coordinates with adaptive density around the cockpit.
+   */
+  private getMeshXVals(): number[] {
+    const L = this.params.length * 12;
+    const activeCpStart = this.params.cockpitStart;
+    const activeCpEnd = activeCpStart + this.params.cockpitLength;
+
+    const xVals: number[] = [];
+    const uSegs1 = 20; // Stern to cockpit start
+    const uSegs2 = 50; // Cockpit zone (high resolution)
+    const uSegs3 = 30; // Cockpit end to bow
+
+    // Zone 1: Stern to cockpit start
+    for (let i = 0; i < uSegs1; i++) {
+      xVals.push((i / uSegs1) * activeCpStart);
+    }
+    // Zone 2: Cockpit zone
+    for (let i = 0; i < uSegs2; i++) {
+      xVals.push(activeCpStart + (i / uSegs2) * (activeCpEnd - activeCpStart));
+    }
+    // Zone 3: Cockpit end to bow
+    for (let i = 0; i <= uSegs3; i++) {
+      xVals.push(activeCpEnd + (i / uSegs3) * (L - activeCpEnd));
+    }
+
+    return xVals;
+  }
+
+  /**
    * Generates a smooth hull mesh grid for Three.js rendering.
    */
   public generateHullMesh(): MeshData {
     const L = this.params.length * 12;
-    const uSegments = 50;
-    const vSegments = 20;
+    const xVals = this.getMeshXVals();
+    const uSegments = xVals.length - 1;
+    const vSegments = 50;
 
     const vertices: number[] = [];
     const indices: number[] = [];
@@ -119,8 +149,8 @@ export class KayakBuilder {
     };
 
     for (let u = 0; u <= uSegments; u++) {
-      const uPct = u / uSegments;
-      const x = uPct * L;
+      const x = xVals[u];
+      const uPct = x / L;
 
       const keelPt = this.keel.getPointAtX(x);
       const gunLeft = this.gunwale.getLeftPointAtX(x);
@@ -142,12 +172,12 @@ export class KayakBuilder {
           vz = this.sectionsImporter.getHullZ(x, vy);
         } else {
           if (vPct <= 0.5) {
-            // Left side
-            const t = vPct / 0.5;
+            // Left side: sweeps from Port Gunwale (-gunwaleY) to Keel (0)
+            const t = 1.0 - (vPct / 0.5);
             vy = evaluateBezier1D(0, hullCPY, -gunwaleY, t);
             vz = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
           } else {
-            // Right side (mirror)
+            // Right side: sweeps from Keel (0) to Starboard Gunwale (+gunwaleY)
             const t = (vPct - 0.5) / 0.5;
             vy = evaluateBezier1D(0, -hullCPY, gunwaleY, t);
             vz = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
@@ -188,7 +218,7 @@ export class KayakBuilder {
    */
   public generateDeckMesh(): MeshData {
     const L = this.params.length * 12;
-    const vSegments = 51; // Changed from 50 to 51 (odd) to eliminate centerline vertex, preventing crossover clamping artifacts
+    const vSegments = 51; // Odd number prevents centerline vertex crossover clamping
 
     const vertices: number[] = [];
     const indices: number[] = [];
@@ -198,24 +228,7 @@ export class KayakBuilder {
     const activeCpStart = this.params.cockpitStart;
     const activeCpEnd = activeCpStart + this.params.cockpitLength;
 
-    const xVals: number[] = [];
-    const uSegs1 = 20; // Stern to cockpit start
-    const uSegs2 = 50; // Cockpit zone (high resolution)
-    const uSegs3 = 30; // Cockpit end to bow
-
-    // Zone 1: Stern to cockpit start
-    for (let i = 0; i < uSegs1; i++) {
-      xVals.push((i / uSegs1) * activeCpStart);
-    }
-    // Zone 2: Cockpit zone
-    for (let i = 0; i < uSegs2; i++) {
-      xVals.push(activeCpStart + (i / uSegs2) * (activeCpEnd - activeCpStart));
-    }
-    // Zone 3: Cockpit end to bow
-    for (let i = 0; i <= uSegs3; i++) {
-      xVals.push(activeCpEnd + (i / uSegs3) * (L - activeCpEnd));
-    }
-
+    const xVals = this.getMeshXVals();
     const uSegments = xVals.length - 1;
 
     const getPlaneZ = (xVal: number) => {
@@ -496,6 +509,7 @@ export class KayakBuilder {
     // 2. Write all structural transverse rib curves
     const stations = this.generateStations(0);
     stations.forEach(st => {
+      if (st.rhinoClosedCurve) file.objects().addCurve(st.rhinoClosedCurve);
       if (st.rhinoHullCurveLeft) file.objects().addCurve(st.rhinoHullCurveLeft);
       if (st.rhinoHullCurveRight) file.objects().addCurve(st.rhinoHullCurveRight);
       if (st.rhinoDeckCurveLeft) file.objects().addCurve(st.rhinoDeckCurveLeft);

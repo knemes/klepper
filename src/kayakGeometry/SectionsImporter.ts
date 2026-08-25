@@ -7,6 +7,11 @@ interface SectionPoint {
 interface Section {
   x: number;
   points: SectionPoint[];
+  gunwaleLeft: SectionPoint;
+  gunwaleRight: SectionPoint;
+  hullPoints: SectionPoint[];
+  deckPoints: SectionPoint[];
+  width: number;
 }
 
 export class SectionsImporter {
@@ -18,20 +23,75 @@ export class SectionsImporter {
     if (jsonData && jsonData.sections) {
       // Map section X coordinates from JSON (reversing direction: X_builder = L - X_json)
       this.sections = jsonData.sections.map((s: any) => {
+        const rawPoints: SectionPoint[] = s.points || [];
+        const sorted = [...rawPoints].sort((a, b) => a.y - b.y);
+
+        if (sorted.length === 0) {
+          const defaultPt = { y: 0.0, z: 8.0 };
+          return {
+            x: this.L - s.x,
+            points: [defaultPt],
+            gunwaleLeft: defaultPt,
+            gunwaleRight: defaultPt,
+            hullPoints: [defaultPt],
+            deckPoints: [defaultPt],
+            width: 0.001
+          };
+        }
+
+        const gunwaleLeft = sorted[0];
+        const gunwaleRight = sorted[sorted.length - 1];
+        const width = Math.max(0.001, Math.abs(gunwaleLeft.y), Math.abs(gunwaleRight.y));
+
+        const getRefZ = (y: number) => {
+          const span = gunwaleRight.y - gunwaleLeft.y || 1.0;
+          const t = (y - gunwaleLeft.y) / span;
+          return gunwaleLeft.z + (gunwaleRight.z - gunwaleLeft.z) * t;
+        };
+
+        const hullPoints: SectionPoint[] = [gunwaleLeft];
+        const deckPoints: SectionPoint[] = [gunwaleLeft];
+
+        for (let i = 1; i < sorted.length - 1; i++) {
+          const pt = sorted[i];
+          const refZ = getRefZ(pt.y);
+          if (pt.z >= refZ) {
+            deckPoints.push(pt);
+          } else {
+            hullPoints.push(pt);
+          }
+        }
+
+        hullPoints.push(gunwaleRight);
+        deckPoints.push(gunwaleRight);
+
+        // Sort by Y ascending to guarantee monotonic traversal
+        hullPoints.sort((a, b) => a.y - b.y);
+        deckPoints.sort((a, b) => a.y - b.y);
+
         return {
           x: this.L - s.x,
-          points: s.points || []
+          points: sorted,
+          gunwaleLeft,
+          gunwaleRight,
+          hullPoints,
+          deckPoints,
+          width
         };
       });
 
       // Add a clean stern tip point at X = 0 if it is missing
       const hasSternTip = this.sections.some((s: any) => Math.abs(s.x) < 0.01);
       if (!hasSternTip) {
+        const sternPt = { y: 0.0, z: 8.0 };
         this.sections.push({
           x: 0.0,
-          points: [
-            { y: 0.0, z: 8.0 } // Stern tip point at planar gunwale height
-          ]
+          points: [sternPt],
+          gunwaleLeft: sternPt,
+          gunwaleRight: sternPt,
+          hullPoints: [sternPt],
+          deckPoints: [sternPt],
+          width: 0.001
         });
       }
 
@@ -76,10 +136,9 @@ export class SectionsImporter {
    * Interpolate Z coordinate at a given Y coordinate for a specific section.
    */
   private interpolateZForY(points: SectionPoint[], targetY: number): number {
-    if (points.length === 0) return 8.0; // default to planar gunwale height
+    if (points.length === 0) return 8.0;
     if (points.length === 1) return points[0].z;
 
-    // points are already sorted by Y coordinate from negative to positive
     const y = targetY;
     if (y <= points[0].y) return points[0].z;
     if (y >= points[points.length - 1].y) return points[points.length - 1].z;
@@ -97,7 +156,6 @@ export class SectionsImporter {
 
   /**
    * Evaluates the hull height at a given X and Y.
-   * Hull has Z <= 8.0.
    */
   public getHullZ(x: number, y: number): number {
     const neighbors = this.getNeighboringSections(x);
@@ -109,25 +167,17 @@ export class SectionsImporter {
     const W_x = this.getGunwaleY(x);
     const pct = y / (W_x || 1.0);
 
-    const W_0 = Math.max(0.001, ...s0.points.map(p => Math.abs(p.y)));
-    const W_1 = Math.max(0.001, ...s1.points.map(p => Math.abs(p.y)));
+    const y0 = pct * s0.width;
+    const y1 = pct * s1.width;
 
-    const y0 = pct * W_0;
-    const y1 = pct * W_1;
-
-    // Filter hull points (Z <= 8.0)
-    const hull0 = s0.points.filter(p => p.z <= 8.001);
-    const hull1 = s1.points.filter(p => p.z <= 8.001);
-
-    const z0 = this.interpolateZForY(hull0, y0);
-    const z1 = this.interpolateZForY(hull1, y1);
+    const z0 = this.interpolateZForY(s0.hullPoints, y0);
+    const z1 = this.interpolateZForY(s1.hullPoints, y1);
 
     return z0 + (z1 - z0) * t;
   }
 
   /**
    * Evaluates the deck height at a given X and Y.
-   * Deck has Z >= 8.0.
    */
   public getDeckZ(x: number, y: number): number {
     const neighbors = this.getNeighboringSections(x);
@@ -139,36 +189,24 @@ export class SectionsImporter {
     const W_x = this.getGunwaleY(x);
     const pct = y / (W_x || 1.0);
 
-    const W_0 = Math.max(0.001, ...s0.points.map(p => Math.abs(p.y)));
-    const W_1 = Math.max(0.001, ...s1.points.map(p => Math.abs(p.y)));
+    const y0 = pct * s0.width;
+    const y1 = pct * s1.width;
 
-    const y0 = pct * W_0;
-    const y1 = pct * W_1;
-
-    // Filter deck points (Z >= 8.0)
-    const deck0 = s0.points.filter(p => p.z >= 7.999);
-    const deck1 = s1.points.filter(p => p.z >= 7.999);
-
-    const z0 = this.interpolateZForY(deck0, y0);
-    const z1 = this.interpolateZForY(deck1, y1);
+    const z0 = this.interpolateZForY(s0.deckPoints, y0);
+    const z1 = this.interpolateZForY(s1.deckPoints, y1);
 
     return z0 + (z1 - z0) * t;
   }
 
   /**
    * Gets the maximum half-beam at a given X coordinate.
-   * This is the maximum Y coordinate in the section.
    */
   public getGunwaleY(x: number): number {
     const neighbors = this.getNeighboringSections(x);
     if (!neighbors) return 0.0;
 
     const { s0, s1, t } = neighbors;
-
-    const maxY0 = Math.max(...s0.points.map(p => Math.abs(p.y)));
-    const maxY1 = Math.max(...s1.points.map(p => Math.abs(p.y)));
-
-    return maxY0 + (maxY1 - maxY0) * t;
+    return s0.width + (s1.width - s0.width) * t;
   }
 
   /**

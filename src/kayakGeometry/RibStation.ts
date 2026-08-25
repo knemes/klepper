@@ -14,11 +14,13 @@ export class RibStation extends KayakGeometry {
   public hullCurveRight: Point3D[] = [];
   public deckCurveLeft: Point3D[] = [];
   public deckCurveRight: Point3D[] = [];
+  public closedProfile: Point3D[] = [];
 
   public rhinoHullCurveLeft: any = null;
   public rhinoHullCurveRight: any = null;
   public rhinoDeckCurveLeft: any = null;
   public rhinoDeckCurveRight: any = null;
+  public rhinoClosedCurve: any = null;
 
   public areaSubmerged = 0;
   public facetStartX: number = 0;
@@ -63,7 +65,7 @@ export class RibStation extends KayakGeometry {
     const keelZ = this.keelPt.z;
     const gunwaleZ = this.gunwaleLeft.z;
 
-    // Hull curve control point parameters (from original Bézier formula)
+    // Hull curve control point parameters (from Bézier formula)
     const hullCPY = -gY * (1.0 - params.hullHorizontalCurvature * 0.7);
     const hullCPZ = keelZ + (gunwaleZ - keelZ) * params.hullVerticalCurvature;
 
@@ -71,50 +73,33 @@ export class RibStation extends KayakGeometry {
     const L = params.length * 12;
     const facetStartX = this.facetStartX || L * params.deckLongitudinalPeak;
 
-
-    // 1. Evaluate hull curves (keel to gunwale)
     const evaluateBezier1D = (p0: number, p1: number, p2: number, t: number): number => {
       const mt = 1.0 - t;
       return mt * mt * p0 + 2.0 * mt * t * p1 + t * t * p2;
     };
 
+    // 1. Evaluate hull curves
+    // Hull Left: starts at Keel (y=0) and goes to Port Gunwale (y=-gY)
     const leftHullList = new this.rhino.Point3dList();
-    const rightHullList = new this.rhino.Point3dList();
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      let hY: number;
+      let hZ: number;
 
-    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-      for (let i = 0; i <= segments; i++) {
-        const t = i / segments;
-        // Left side hull point
-        const hY = -gY + gY * t;
-        const hZ = this.sectionsImporter.getHullZ(this.x, hY);
-        this.hullCurveLeft.push({ x: this.x, y: hY, z: hZ });
-        leftHullList.add(this.x, hY, hZ);
-
-        // Right side hull point (mirror)
-        this.hullCurveRight.push({ x: this.x, y: -hY, z: hZ });
-        rightHullList.add(this.x, -hY, hZ);
+      if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+        hY = -gY * t;
+        hZ = this.sectionsImporter.getHullZ(this.x, hY);
+      } else {
+        hY = evaluateBezier1D(0, hullCPY, -gY, t);
+        hZ = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
       }
-    } else {
-      for (let i = 0; i <= segments; i++) {
-        const t = i / segments;
 
-        // Left side hull point
-        const hY = evaluateBezier1D(0, hullCPY, -gY, t);
-        const hZ = evaluateBezier1D(keelZ, hullCPZ, gunwaleZ, t);
-        this.hullCurveLeft.push({ x: this.x, y: hY, z: hZ });
-        leftHullList.add(this.x, hY, hZ);
-
-        // Right side hull point (mirror)
-        this.hullCurveRight.push({ x: this.x, y: -hY, z: hZ });
-        rightHullList.add(this.x, -hY, hZ);
-      }
+      this.hullCurveLeft.push({ x: this.x, y: hY, z: hZ });
+      leftHullList.add(this.x, hY, hZ);
     }
 
-    // Create rhino NURBS curves for the hull
-    this.rhinoHullCurveLeft = this.rhino.NurbsCurve.create(false, 3, leftHullList);
-    this.rhinoHullCurveRight = this.rhino.NurbsCurve.create(false, 3, rightHullList);
-
-    // 2. Evaluate deck curves (gunwale to centerline peak)
+    // 2. Evaluate deck curves
+    // Deck Left: starts at Port Gunwale (y=-gY) and goes to Deck Peak (y=0)
     const leftDeckList = new this.rhino.Point3dList();
     const rightDeckList = new this.rhino.Point3dList();
     const deckZ_untrimmed = this.deckPtUntrimmed.z;
@@ -125,12 +110,9 @@ export class RibStation extends KayakGeometry {
 
     for (let i = 0; i <= segments; i++) {
       const t = i / segments;
-
-      // Left side deck: goes from -gY to 0
       const dY = -gY + gY * t;
       const absY = Math.abs(dY);
 
-      // Evaluate the untrimmed height
       let dZ = 0;
       if (this.sectionsImporter && this.sectionsImporter.hasData()) {
         dZ = this.sectionsImporter.getDeckZ(this.x, dY);
@@ -139,21 +121,78 @@ export class RibStation extends KayakGeometry {
         dZ = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
       }
 
-      // Simply trim off the top of the rib using the plane
       if (isTrimmedZone) {
         dZ = Math.min(dZ, currentPlaneZ);
       }
 
       this.deckCurveLeft.push({ x: this.x, y: dY, z: dZ });
       leftDeckList.add(this.x, dY, dZ);
-
-      // Right side deck (mirror)
-      this.deckCurveRight.push({ x: this.x, y: -dY, z: dZ });
-      rightDeckList.add(this.x, -dY, dZ);
     }
 
+    // Deck Right: starts at Deck Peak (y=0) and goes to Starboard Gunwale (y=+gY)
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const dY = gY * t;
+      const absY = Math.abs(dY);
+
+      let dZ = 0;
+      if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+        dZ = this.sectionsImporter.getDeckZ(this.x, dY);
+      } else {
+        const yPct = absY / (gY || 1.0);
+        dZ = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
+      }
+
+      if (isTrimmedZone) {
+        dZ = Math.min(dZ, currentPlaneZ);
+      }
+
+      this.deckCurveRight.push({ x: this.x, y: dY, z: dZ });
+      rightDeckList.add(this.x, dY, dZ);
+    }
+
+    // Hull Right: starts at Starboard Gunwale (y=+gY) and goes back to Keel (y=0)
+    const rightHullList = new this.rhino.Point3dList();
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      let hY: number;
+      let hZ: number;
+
+      if (this.sectionsImporter && this.sectionsImporter.hasData()) {
+        hY = gY - gY * t;
+        hZ = this.sectionsImporter.getHullZ(this.x, hY);
+      } else {
+        hY = evaluateBezier1D(gY, -hullCPY, 0, t);
+        hZ = evaluateBezier1D(gunwaleZ, hullCPZ, keelZ, t);
+      }
+
+      this.hullCurveRight.push({ x: this.x, y: hY, z: hZ });
+      rightHullList.add(this.x, hY, hZ);
+    }
+
+    // 3. Assemble unified continuous closed profile loop
+    // Order: Keel -> Hull Left -> Gunwale Left -> Deck Left -> Deck Peak -> Deck Right -> Gunwale Right -> Hull Right -> Keel
+    this.closedProfile = [
+      ...this.hullCurveLeft,
+      ...this.deckCurveLeft.slice(1),
+      ...this.deckCurveRight.slice(1),
+      ...this.hullCurveRight.slice(1)
+    ];
+
+    // Create Rhino NURBS curves for each quadrant
+    this.rhinoHullCurveLeft = this.rhino.NurbsCurve.create(false, 3, leftHullList);
     this.rhinoDeckCurveLeft = this.rhino.NurbsCurve.create(false, 3, leftDeckList);
     this.rhinoDeckCurveRight = this.rhino.NurbsCurve.create(false, 3, rightDeckList);
+    this.rhinoHullCurveRight = this.rhino.NurbsCurve.create(false, 3, rightHullList);
+
+    // Create a single closed Rhino NURBS curve for the rib station
+    const closedList = new this.rhino.Point3dList();
+    for (const p of this.closedProfile) {
+      closedList.add(p.x, p.y, p.z);
+    }
+    // Add start point to close the NURBS loop
+    closedList.add(this.closedProfile[0].x, this.closedProfile[0].y, this.closedProfile[0].z);
+    this.rhinoClosedCurve = this.rhino.NurbsCurve.create(false, 3, closedList);
   }
 
   private calculateSubmergedArea(draft: number) {
@@ -166,7 +205,7 @@ export class RibStation extends KayakGeometry {
       if (pts[pts.length - 1].z < draft && this.hullCurveLeft.length > pts.length) {
         const nextPt = this.hullCurveLeft[pts.length];
         const prevPt = pts[pts.length - 1];
-        const fraction = (draft - prevPt.z) / (nextPt.z - prevPt.z);
+        const fraction = (draft - prevPt.z) / (nextPt.z - prevPt.z || 1);
         const intersectY = prevPt.y + fraction * (nextPt.y - prevPt.y);
         pts.push({ x: this.x, y: intersectY, z: draft });
       }
@@ -200,10 +239,7 @@ export class RibStation extends KayakGeometry {
       });
     };
 
-    const pointsLeft = offsetPoints(this.hullCurveLeft);
-    const pointsRight = offsetPoints(this.hullCurveRight);
-    const deckPtsLeft = offsetPoints(this.deckCurveLeft);
-    const deckPtsRight = offsetPoints(this.deckCurveRight);
+    const profilePts = offsetPoints(this.closedProfile);
 
     // Calculate dimensions
     const minY = -params.beam / 2.0 - 2.0;
@@ -218,23 +254,12 @@ export class RibStation extends KayakGeometry {
     const svgX = (y: number) => (y - minY).toFixed(2);
     const svgY = (z: number) => (maxZ - z).toFixed(2);
 
-    // Outer hull path
-    let dHull = `M ${svgX(pointsLeft[0].y)} ${svgY(pointsLeft[0].z)}`;
-    for (let i = 1; i < pointsLeft.length; i++) {
-      dHull += ` L ${svgX(pointsLeft[i].y)} ${svgY(pointsLeft[i].z)}`;
+    // Outer continuous closed frame path
+    let dClosed = `M ${svgX(profilePts[0].y)} ${svgY(profilePts[0].z)}`;
+    for (let i = 1; i < profilePts.length; i++) {
+      dClosed += ` L ${svgX(profilePts[i].y)} ${svgY(profilePts[i].z)}`;
     }
-    for (let i = 0; i < pointsRight.length; i++) {
-      dHull += ` L ${svgX(pointsRight[i].y)} ${svgY(pointsRight[i].z)}`;
-    }
-
-    // Outer deck path
-    let dDeck = `M ${svgX(deckPtsRight[0].y)} ${svgY(deckPtsRight[0].z)}`;
-    for (let i = 1; i < deckPtsRight.length; i++) {
-      dDeck += ` L ${svgX(deckPtsRight[i].y)} ${svgY(deckPtsRight[i].z)}`;
-    }
-    for (let i = 0; i < deckPtsLeft.length; i++) {
-      dDeck += ` L ${svgX(deckPtsLeft[i].y)} ${svgY(deckPtsLeft[i].z)}`;
-    }
+    dClosed += " Z";
 
     const centerlinePath = `M ${svgX(0)} ${svgY(minZ)} L ${svgX(0)} ${svgY(maxZ)}`;
     const waterlinePath = `M ${svgX(minY)} ${svgY(params.hullHeight)} L ${svgX(maxY)} ${svgY(params.hullHeight)}`;
@@ -253,9 +278,8 @@ export class RibStation extends KayakGeometry {
         <text x="${svgX(0)}" y="${svgY(maxZ - 0.5)}" font-family="monospace" font-size="1.2" fill="#2C4A3E" text-anchor="middle">CL</text>
         <text x="${svgX(maxY - 1)}" y="${svgY(params.hullHeight - 0.2)}" font-family="monospace" font-size="1" fill="#8FBC8F" text-anchor="end">WATERLINE (WL)</text>
 
-        <!-- Outer Cuts -->
-        <path d="${dHull}" fill="none" stroke="#14231A" stroke-width="1.5" />
-        <path d="${dDeck}" fill="none" stroke="#14231A" stroke-width="1.5" />
+        <!-- Outer Closed Frame Cut -->
+        <path d="${dClosed}" fill="none" stroke="#14231A" stroke-width="1.5" />
 
         <!-- Strongback Alignment Notch -->
         <rect x="${svgX(-1.5)}" y="${svgY(this.deckPt.z - 4)}" width="3" height="3" fill="none" stroke="#FF7A5C" stroke-width="1" />
