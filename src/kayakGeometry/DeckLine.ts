@@ -59,44 +59,41 @@ export class DeckLine extends KayakGeometry {
   }
 
   public sectionsImporter: any = null;
+  public hullHeight: number = 8.0;
 
   /**
-   * Evaluates the trimmed Z height (two straight lines).
+   * Evaluates the trimmed Z height (two straight lines or trimmed scan curve).
    */
   public getPointAtX(targetX: number): { x: number; y: number; z: number } {
-    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-      const z_offset = this.sternDeckZ - 8.0;
-      const z_untrimmed = this.sectionsImporter.getDeckCenterlineZ(targetX) + z_offset;
-      const isTrimmedZone = targetX <= this.facetStartX;
-      if (isTrimmedZone) {
-        const planeZ = this.sternDeckZ + targetX * this.slope;
-        return { x: targetX, y: 0, z: Math.min(z_untrimmed, planeZ) };
-      }
-      return { x: targetX, y: 0, z: z_untrimmed };
+    const untrimmed = this.getUntrimmedPointAtX(targetX);
+    const isTrimmedZone = targetX <= this.facetStartX;
+    if (isTrimmedZone) {
+      const planeZ = this.sternDeckZ + targetX * this.slope;
+      return { x: targetX, y: 0, z: Math.min(untrimmed.z, planeZ) };
     }
-
-    let z = this.totalHeight;
-    if (this.L > 0) {
-      if (targetX <= this.facetStartX) {
-        z = this.sternDeckZ + targetX * this.slope;
-      } else {
-        z = this.totalHeight - (targetX - this.facetStartX) * (this.totalHeight - this.bowDeckZ) / (this.L - this.facetStartX || 1);
-      }
-    }
-    return { x: targetX, y: 0, z };
+    return untrimmed;
   }
 
   /**
-   * Evaluates the original untrimmed Z height (NURBS curve).
-   * For targetX > facetStartX, returns the linear height to match the straight side profile.
+   * Evaluates the original untrimmed Z height (scaled to totalHeight at facetStartX).
+   * For targetX > facetStartX without sections data, returns the linear height to match the straight side profile.
    */
   public getUntrimmedPointAtX(targetX: number): { x: number; y: number; z: number } {
+    const crownHeight = Math.max(0, this.totalHeight - this.sternDeckZ);
+    const facetStartX = this.facetStartX || (this.L * 0.55);
+
     if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-      const z_offset = this.sternDeckZ - 8.0;
-      return { x: targetX, y: 0, z: this.sectionsImporter.getDeckCenterlineZ(targetX) + z_offset };
+      const rawZ = this.sectionsImporter.getDeckCenterlineZ(targetX);
+      const rawPeakZ = this.sectionsImporter.getDeckCenterlineZ(facetStartX);
+      const rawScanGunZ = 8.0;
+      const rawPeakCrown = Math.max(0.01, rawPeakZ - rawScanGunZ);
+      const rawCrown = Math.max(0, rawZ - rawScanGunZ);
+      const normCrown = rawCrown / rawPeakCrown;
+      const z = this.sternDeckZ + crownHeight * normCrown;
+      return { x: targetX, y: 0, z };
     }
 
-    if (targetX > this.facetStartX) {
+    if (targetX > this.facetStartX && this.facetStartX > 0) {
       let z = this.totalHeight;
       if (this.L > 0) {
         z = this.totalHeight - (targetX - this.facetStartX) * (this.totalHeight - this.bowDeckZ) / (this.L - this.facetStartX || 1);

@@ -29,7 +29,7 @@ export default function App() {
     sternLength: 12,        // inches
     bowWidthFactor: 0.42,   // scaling factor
     sternWidthFactor: 0.65, // scaling factor
-    
+
     hullHorizontalCurvature: 0.35,
     hullVerticalCurvature: 0.48,
     deckVerticalCurvature: 0.45,
@@ -68,7 +68,7 @@ export default function App() {
   const handleParamChange = (key: keyof KayakParameters, value: number) => {
     setParams((prev) => {
       const next = { ...prev, [key]: value };
-      
+
       // Validation constraints
       if (key === "beam") {
         next.beam = Math.max(18, Math.min(36, value));
@@ -77,19 +77,22 @@ export default function App() {
         next.beamPlacement = Math.max(0.25, Math.min(0.75, value));
       }
 
-      if (key === "hullHeight" && next.totalHeight <= value) {
-        next.totalHeight = value + 2.5;
+      if (key === "hullHeight") {
+        const clampedHull = Math.max(6, Math.min(12, value));
+        const prevCrown = prev.totalHeight - prev.hullHeight;
+        next.hullHeight = clampedHull;
+        next.totalHeight = clampedHull + Math.max(1.5, prevCrown);
       }
-      if (key === "totalHeight" && next.hullHeight >= value) {
-        next.hullHeight = value - 2.5;
+      if (key === "totalHeight") {
+        next.totalHeight = Math.max(next.hullHeight + 1.5, value);
       }
-      
+
       const L_in = next.length * 12;
-      
+
       // 1. Lock peak to the front end of the cockpit
       const facetStartX = next.cockpitStart + next.cockpitLength;
       next.deckLongitudinalPeak = facetStartX / L_in;
-      
+
       // 2. Cockpit must sit within the main body of the hull (12" margin from bow)
       if (facetStartX > L_in - 12) {
         next.cockpitStart = L_in - 12 - next.cockpitLength;
@@ -130,53 +133,53 @@ export default function App() {
   // Sleek, premium startup loader screen
   if (loading) {
     return (
-      <div 
-        className="page-container" 
-        style={{ 
-          height: "100vh", 
-          display: "flex", 
-          flexDirection: "column", 
-          alignItems: "center", 
-          justifyContent: "center", 
-          backgroundColor: "#eae7df", 
-          color: "#14231a" 
+      <div
+        className="page-container"
+        style={{
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#eae7df",
+          color: "#14231a"
         }}
       >
         <div style={{ textAlign: "center", maxWidth: "450px" }}>
-          <h1 
-            style={{ 
-              fontFamily: "serif", 
-              fontWeight: 300, 
-              letterSpacing: "4px", 
-              margin: "0 0 1rem", 
-              fontSize: "1.8rem" 
+          <h1
+            style={{
+              fontFamily: "serif",
+              fontWeight: 300,
+              letterSpacing: "4px",
+              margin: "0 0 1rem",
+              fontSize: "1.8rem"
             }}
           >
             ꓘ-B KAYAKS
           </h1>
-          <div 
-            style={{ 
-              fontSize: "0.75rem", 
-              fontFamily: "monospace", 
-              opacity: 0.7, 
-              letterSpacing: "2px", 
-              textTransform: "uppercase" 
+          <div
+            style={{
+              fontSize: "0.75rem",
+              fontFamily: "monospace",
+              opacity: 0.7,
+              letterSpacing: "2px",
+              textTransform: "uppercase"
             }}
           >
             Initializing CAD Geometry Engine...
           </div>
-          <div 
-            className="loader-bar" 
-            style={{ 
-              width: "150px", 
-              height: "1px", 
-              backgroundColor: "rgba(20,35,26,0.3)", 
-              margin: "1.5rem auto 0", 
+          <div
+            className="loader-bar"
+            style={{
+              width: "150px",
+              height: "1px",
+              backgroundColor: "rgba(20,35,26,0.3)",
+              margin: "1.5rem auto 0",
               position: "relative",
               overflow: "hidden"
             }}
           >
-            <div 
+            <div
               style={{
                 width: "60px",
                 height: "100%",
@@ -200,14 +203,14 @@ export default function App() {
   // Load failure fallback
   if (loadError) {
     return (
-      <div 
-        className="page-container" 
-        style={{ 
-          height: "100vh", 
-          display: "flex", 
-          alignItems: "center", 
-          justifyContent: "center", 
-          backgroundColor: "#eae7df", 
+      <div
+        className="page-container"
+        style={{
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#eae7df",
           color: "#802020",
           textAlign: "center",
           padding: "2rem"
@@ -236,10 +239,10 @@ export default function App() {
       )}
 
       {currentPage === "bespoke" && builder && (
-        <BespokeStudio 
-          params={params} 
-          builder={builder} 
-          onParamChange={handleParamChange} 
+        <BespokeStudio
+          params={params}
+          builder={builder}
+          onParamChange={handleParamChange}
         />
       )}
 

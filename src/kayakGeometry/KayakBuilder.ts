@@ -48,9 +48,10 @@ export class KayakBuilder {
     this.gunwale.sectionsImporter = this.sectionsImporter;
 
     // Compute flat deck plane parameters based directly on cockpit position
-    this.sternDeckZ = this.deckLine.getUntrimmedPointAtX(0).z;
     this.facetStartX = this.params.cockpitStart + this.params.cockpitLength;
-    const peakHeight = this.deckLine.getUntrimmedPointAtX(this.facetStartX).z;
+    this.deckLine.facetStartX = this.facetStartX;
+    this.sternDeckZ = this.params.hullHeight;
+    const peakHeight = this.params.totalHeight;
     this.slope = (peakHeight - this.sternDeckZ) / (this.facetStartX || 1);
 
     // Update the deckLine geometry with the solved facetStartX and slope
