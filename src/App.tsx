@@ -34,11 +34,11 @@ export default function App() {
     hullVerticalCurvature: 0.48,
     deckVerticalCurvature: 0.45,
     deckLongitudinalPeak: 0.5536, // 93" from stern (75" from bow)
+    facetOffsetForward: 24,       // inches forward of deck crown point
 
     cockpitLength: 34,
-    cockpitWidth: 19,
-    cockpitStart: 59,       // 93" - 34" = 59" from stern
-
+    cockpitWidth: 1.0,      // 100% of max flat facet width
+    cockpitStart: 59,       // inches from stern
     ribSpacing: 12,
     plywoodThickness: 0.75, // 3/4" plywood
     coamingHeight: 0.75,    // 3/4" coaming height
@@ -87,39 +87,32 @@ export default function App() {
         next.totalHeight = Math.max(next.hullHeight + 1.5, value);
       }
 
+      if (key === "facetOffsetForward") {
+        next.facetOffsetForward = Math.max(6, Math.min(30, value));
+      }
+
+      if (key === "cockpitWidth") {
+        next.cockpitWidth = Math.max(0.20, Math.min(1.0, value));
+      }
+
       const L_in = next.length * 12;
 
-      // 1. Lock peak to the front end of the cockpit
-      const facetStartX = next.cockpitStart + next.cockpitLength;
-      next.deckLongitudinalPeak = facetStartX / L_in;
+      // 1. Deck Crown Point bounds (30% to 70% of boat length)
+      next.deckLongitudinalPeak = Math.max(0.30, Math.min(0.70, next.deckLongitudinalPeak));
+      const peakX = next.deckLongitudinalPeak * L_in;
 
-      // 2. Cockpit must sit within the main body of the hull (12" margin from bow)
-      if (facetStartX > L_in - 12) {
-        next.cockpitStart = L_in - 12 - next.cockpitLength;
-      }
-      if (next.cockpitStart < 12) {
-        next.cockpitStart = 12;
-      }
+      // 2. Facet trimming plane extends facetOffsetForward (6" to 30") forward of deck crown point
+      const facetOffset = next.facetOffsetForward ?? 24;
+      const facetStartX = Math.min(L_in - 4.0, peakX + facetOffset);
 
-      // 3. Cap cockpit width based on the trimmed flat facet width at cockpit center
-      const cpCenterX = next.cockpitStart + next.cockpitLength / 2;
-      const sternDeckZ = next.hullHeight;
-      const currentFacetStartX = next.cockpitStart + next.cockpitLength;
-      const slope = (next.totalHeight - sternDeckZ) / (currentFacetStartX || 1);
-      const planeZ = sternDeckZ + cpCenterX * slope;
+      // 3. Cockpit coaming position hard rule: front of cockpit must be at least 1" behind peak of facet
+      const minCpStart = Math.max(12, Math.round(next.sternLength));
+      const maxCpStart = Math.max(minCpStart, Math.floor(facetStartX - next.cockpitLength - 1.0));
+      next.cockpitStart = Math.max(minCpStart, Math.min(maxCpStart, next.cockpitStart));
 
-      const gunwaleY = (next.beam / 2) * Math.sin(Math.PI * cpCenterX / L_in);
-      const gunwaleZ = next.hullHeight - 1.0;
-      const deckZ_untrimmed = sternDeckZ + (next.totalHeight - sternDeckZ) * Math.sin(Math.PI * cpCenterX / L_in);
+      // 4. Ensure cockpit width factor is valid percentage [0.20, 1.0]
+      next.cockpitWidth = Math.max(0.20, Math.min(1.0, next.cockpitWidth ?? 1.0));
 
-      const pPower = 1.0 + next.deckVerticalCurvature * 2.2;
-      const yPct = Math.max(0, Math.min(1, (deckZ_untrimmed - planeZ) / (deckZ_untrimmed - gunwaleZ || 1)));
-      const yFlat = gunwaleY * Math.pow(yPct, 1.0 / pPower);
-
-      const maxCpWidth = Math.max(10.0, yFlat * 2 - 1.0);
-      if (next.cockpitWidth > maxCpWidth) {
-        next.cockpitWidth = maxCpWidth;
-      }
       return next;
     });
   };

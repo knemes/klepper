@@ -25,10 +25,11 @@ export const PRESET_MODELS: PresetModel[] = [
       hullHorizontalCurvature: 0.45,
       hullVerticalCurvature: 0.52,
       deckVerticalCurvature: 0.35,
-      deckLongitudinalPeak: 0.48,
+      deckLongitudinalPeak: 0.50,
+      facetOffsetForward: 24,
       cockpitLength: 32,
-      cockpitWidth: 17,
-      cockpitStart: 68,
+      cockpitWidth: 1.0,
+      cockpitStart: 46,
       ribSpacing: 12,
       plywoodThickness: 0.75
     }
@@ -51,8 +52,9 @@ export const PRESET_MODELS: PresetModel[] = [
       hullVerticalCurvature: 0.48,
       deckVerticalCurvature: 0.45,
       deckLongitudinalPeak: 0.5536, // 93" from stern (75" from bow)
+      facetOffsetForward: 24,
       cockpitLength: 34,
-      cockpitWidth: 19,
+      cockpitWidth: 1.0,
       cockpitStart: 59,
       ribSpacing: 12,
       plywoodThickness: 0.75
@@ -75,10 +77,11 @@ export const PRESET_MODELS: PresetModel[] = [
       hullHorizontalCurvature: 0.28,
       hullVerticalCurvature: 0.44,
       deckVerticalCurvature: 0.50,
-      deckLongitudinalPeak: 0.50,
+      deckLongitudinalPeak: 0.52,
+      facetOffsetForward: 24,
       cockpitLength: 36,
-      cockpitWidth: 20,
-      cockpitStart: 94,
+      cockpitWidth: 1.0,
+      cockpitStart: 72,
       ribSpacing: 12,
       plywoodThickness: 0.75
     }
@@ -101,9 +104,10 @@ export const PRESET_MODELS: PresetModel[] = [
       hullVerticalCurvature: 0.40,
       deckVerticalCurvature: 0.55,
       deckLongitudinalPeak: 0.52,
-      cockpitLength: 32,
-      cockpitWidth: 17,
-      cockpitStart: 110,
+      facetOffsetForward: 24,
+      cockpitLength: 34,
+      cockpitWidth: 1.0,
+      cockpitStart: 85,
       ribSpacing: 12,
       plywoodThickness: 0.75
     }

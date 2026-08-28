@@ -47,12 +47,17 @@ export class KayakBuilder {
     this.deckLine.sectionsImporter = this.sectionsImporter;
     this.gunwale.sectionsImporter = this.sectionsImporter;
 
-    // Compute flat deck plane parameters based directly on cockpit position
-    this.facetStartX = this.params.cockpitStart + this.params.cockpitLength;
-    this.deckLine.facetStartX = this.facetStartX;
+    // Compute flat deck plane parameters based on crown point + facet offset relationship
+    const peakX = L * this.params.deckLongitudinalPeak;
+    const facetOffset = this.params.facetOffsetForward !== undefined ? this.params.facetOffsetForward : 24.0;
+    this.facetStartX = Math.min(L - 4.0, peakX + facetOffset);
     this.sternDeckZ = this.params.hullHeight;
-    const peakHeight = this.params.totalHeight;
-    this.slope = (peakHeight - this.sternDeckZ) / (this.facetStartX || 1);
+    this.deckLine.facetStartX = this.facetStartX;
+    this.deckLine.peakX = peakX;
+
+    // The trimming plane passes through top of stern stem (x=0, z=sternDeckZ) and facetOffset forward of crown point
+    const untrimmedFrontPt = this.deckLine.getUntrimmedPointAtX(this.facetStartX);
+    this.slope = (untrimmedFrontPt.z - this.sternDeckZ) / (this.facetStartX || 1);
 
     // Update the deckLine geometry with the solved facetStartX and slope
     this.deckLine.updateGeometry(this.params, this.facetStartX, this.slope, this.sternDeckZ);
@@ -103,17 +108,19 @@ export class KayakBuilder {
   }
 
   /**
-   * Evaluates longitudinal station X coordinates with adaptive density around the cockpit.
+   * Evaluates longitudinal station X coordinates with adaptive density around the cockpit and facet start.
    */
   private getMeshXVals(): number[] {
     const L = this.params.length * 12;
     const activeCpStart = this.params.cockpitStart;
     const activeCpEnd = activeCpStart + this.params.cockpitLength;
+    const fStart = Math.max(activeCpEnd, Math.min(L - 1, this.facetStartX));
 
     const xVals: number[] = [];
     const uSegs1 = 20; // Stern to cockpit start
-    const uSegs2 = 50; // Cockpit zone (high resolution)
-    const uSegs3 = 30; // Cockpit end to bow
+    const uSegs2 = 40; // Cockpit zone (high resolution)
+    const uSegs3 = 15; // Cockpit end to facet start
+    const uSegs4 = 25; // Facet start to bow
 
     // Zone 1: Stern to cockpit start
     for (let i = 0; i < uSegs1; i++) {
@@ -123,9 +130,15 @@ export class KayakBuilder {
     for (let i = 0; i < uSegs2; i++) {
       xVals.push(activeCpStart + (i / uSegs2) * (activeCpEnd - activeCpStart));
     }
-    // Zone 3: Cockpit end to bow
-    for (let i = 0; i <= uSegs3; i++) {
-      xVals.push(activeCpEnd + (i / uSegs3) * (L - activeCpEnd));
+    // Zone 3: Cockpit end to facet start
+    if (fStart > activeCpEnd + 0.1) {
+      for (let i = 0; i < uSegs3; i++) {
+        xVals.push(activeCpEnd + (i / uSegs3) * (fStart - activeCpEnd));
+      }
+    }
+    // Zone 4: Facet start to bow
+    for (let i = 0; i <= uSegs4; i++) {
+      xVals.push(fStart + (i / uSegs4) * (L - fStart));
     }
 
     return xVals;
@@ -608,19 +621,11 @@ export class KayakBuilder {
   public buildFacetOutline() {
     const pts = new this.rhino.Point3dList();
 
-    // Generate sparse sampling coordinates at the actual section stations
+    // Generate smooth sampling coordinates along the facet length
     const xVals: number[] = [];
-    if (this.sectionsImporter && this.sectionsImporter.hasData()) {
-      this.sectionsImporter.sections.forEach(s => {
-        if (s.x < this.facetStartX) {
-          xVals.push(s.x);
-        }
-      });
-    } else {
-      const step = 12.0;
-      for (let x = 0; x < this.facetStartX; x += step) {
-        xVals.push(x);
-      }
+    const numSteps = 40;
+    for (let i = 0; i < numSteps; i++) {
+      xVals.push((i / numSteps) * this.facetStartX);
     }
 
     // 1. Left boundary points

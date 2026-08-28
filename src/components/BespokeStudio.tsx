@@ -251,7 +251,7 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
             style={{ cursor: "pointer" }}
           >
             <h2 className="sidebar-section-title">03. Rib Curvatures</h2>
-            <span className="sidebar-section-number">[x04]</span>
+            <span className="sidebar-section-number">[x05]</span>
           </div>
 
           {expandedSection === "curvatures" && (
@@ -303,16 +303,31 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
 
               <div className="control-group">
                 <div className="control-label-wrapper">
-                  <span className="control-label">Deck Peak Position</span>
-                  <span className="control-value">{Math.round(params.deckLongitudinalPeak * 100)}%</span>
+                  <span className="control-label">Deck Crown Position</span>
+                  <span className="control-value">{(params.deckLongitudinalPeak * params.length * 12).toFixed(0)}" ({Math.round(params.deckLongitudinalPeak * 100)}%)</span>
                 </div>
                 <input
                   type="range"
-                  min="0.35"
-                  max="0.65"
-                  step="0.01"
+                  min="0.30"
+                  max="0.70"
+                  step="0.005"
                   value={params.deckLongitudinalPeak}
                   onChange={(e) => onParamChange("deckLongitudinalPeak", parseFloat(e.target.value))}
+                />
+              </div>
+
+              <div className="control-group">
+                <div className="control-label-wrapper">
+                  <span className="control-label">Facet Trim</span>
+                  <span className="control-value">+{params.facetOffsetForward ?? 24}" (Peak @ {Math.round(builder.facetStartX)}")</span>
+                </div>
+                <input
+                  type="range"
+                  min="6"
+                  max="30"
+                  step="1"
+                  value={params.facetOffsetForward ?? 24}
+                  onChange={(e) => onParamChange("facetOffsetForward", parseFloat(e.target.value))}
                 />
               </div>
             </div>
@@ -330,7 +345,10 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
             <span className="sidebar-section-number">[x04]</span>
           </div>
 
-          {expandedSection === "cockpit" && (
+          {expandedSection === "cockpit" && (() => {
+            const minCpStart = Math.max(12, Math.round(params.sternLength));
+            const maxCpStart = Math.max(minCpStart, Math.floor(builder.facetStartX - params.cockpitLength - 1.0));
+            return (
             <div className="sidebar-content">
               <div className="control-group">
                 <div className="control-label-wrapper">
@@ -350,13 +368,13 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
               <div className="control-group">
                 <div className="control-label-wrapper">
                   <span className="control-label">Cockpit Width</span>
-                  <span className="control-value">{params.cockpitWidth} in</span>
+                  <span className="control-value">{Math.round(params.cockpitWidth * 100)}% of Facet</span>
                 </div>
                 <input
                   type="range"
-                  min="14"
-                  max="24"
-                  step="0.5"
+                  min="0.20"
+                  max="1.00"
+                  step="0.01"
                   value={params.cockpitWidth}
                   onChange={(e) => onParamChange("cockpitWidth", parseFloat(e.target.value))}
                 />
@@ -369,10 +387,10 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
                 </div>
                 <input
                   type="range"
-                  min="40"
-                  max="110"
+                  min={minCpStart}
+                  max={maxCpStart}
                   step="1"
-                  value={params.cockpitStart}
+                  value={Math.max(minCpStart, Math.min(maxCpStart, params.cockpitStart))}
                   onChange={(e) => onParamChange("cockpitStart", parseFloat(e.target.value))}
                 />
               </div>
@@ -392,7 +410,8 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
                 />
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Section 5: Manufacturing Cutlist */}

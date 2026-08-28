@@ -4,7 +4,6 @@ import { KayakGeometry } from "./KayakGeometry";
 export class Cockpit extends KayakGeometry {
   public componentType = "Cockpit";
   public curve: any = null;
-  private tPeak: number = 0;
 
   constructor(rhino: any) {
     super(rhino);
@@ -26,52 +25,58 @@ export class Cockpit extends KayakGeometry {
   ): number {
     const activeCpStart = params.cockpitStart;
     const cpLength = params.cockpitLength;
-    const cpWidth = params.cockpitWidth;
-    const cpCenterX = activeCpStart + cpLength / 2;
     const activeCpEnd = activeCpStart + cpLength;
+    const cpCenterX = activeCpStart + cpLength * 0.48; // Slightly aft for ergonomic seating
 
-    if (this.curve) {
-      const domain = this.curve.domain;
-      const tMin = domain[0];
-      const tPeak = this.tPeak;
-      const xPeak = this.curve.pointAt(tPeak)[0];
-      if (x < activeCpStart || x > xPeak) return 0.0;
+    if (x < activeCpStart || x > activeCpEnd) return 0.0;
 
-      let low = tMin;
-      let high = tPeak;
-      for (let iter = 0; iter < 16; iter++) {
-        const t = (low + high) / 2;
-        const px = this.curve.pointAt(t)[0];
-        if (px < x) {
-          low = t;
-        } else {
-          high = t;
-        }
-      }
-      const finalT = (low + high) / 2;
-      return Math.abs(this.curve.pointAt(finalT)[2]);
+    // Width factor as percentage of maximum flat facet width (0.20 to 1.0, default 1.0 = 100%)
+    const widthFactor = Math.max(0.20, Math.min(1.0, params.cockpitWidth ?? 1.0));
+
+    // Evaluate normalized longitudinal curve profile (teardrop / keyhole)
+    let shape = 0.0;
+    if (x <= cpCenterX) {
+      // Aft half: rounded semi-ellipse
+      const a = cpCenterX - activeCpStart;
+      const dx = cpCenterX - x;
+      const ratio = Math.min(1.0, (dx * dx) / (a * a || 1.0));
+      shape = Math.sqrt(Math.max(0.0, 1.0 - ratio));
+    } else {
+      // Forward half: tapered egg/hoop shape
+      const a = activeCpEnd - cpCenterX;
+      const dx = x - cpCenterX;
+      const ratio = Math.min(1.0, (dx * dx) / (a * a || 1.0));
+      const taper = 1.0 - 0.22 * (dx / (a || 1.0));
+      shape = Math.sqrt(Math.max(0.0, 1.0 - ratio)) * taper;
     }
 
-    if (!facetOutlineCurve) {
-      // Fallback if curve not available
-      if (x >= cpCenterX) {
-        return Math.max(0.0, cpWidth / 2 - 1.0);
-      } else {
-        const xc = x - cpCenterX;
-        const a = cpLength / 2;
-        const b = Math.max(0.0, cpWidth / 2 - 1.0);
-        const ratio = (xc * xc) / (a * a || 1);
-        return ratio < 1.0 ? b * Math.sqrt(1.0 - ratio) : 0.0;
-      }
+    // Determine max available flat facet half-width
+    let maxAllowedHalfW = 10.0; // fallback if curve is not yet generated
+    if (facetOutlineCurve) {
+      const facetCenterHalfW = Math.max(1.0, this.getFacetHalfWidthAtX(cpCenterX, facetOutlineCurve) - 0.75);
+      const facetLocalHalfW = Math.max(0.0, this.getFacetHalfWidthAtX(x, facetOutlineCurve) - 0.75);
+      maxAllowedHalfW = Math.min(facetLocalHalfW, facetCenterHalfW * shape);
+    } else {
+      maxAllowedHalfW = (params.beam * 0.35) * shape;
     }
 
-    // Find tPeak of facetOutlineCurve using a ternary search to ensure monotonic X in the search interval
+    return widthFactor * maxAllowedHalfW;
+  }
+
+  /**
+   * Helper to look up the lateral boundary half-width of the flat facet at X.
+   */
+  private getFacetHalfWidthAtX(xVal: number, facetOutlineCurve: any): number {
+    if (!facetOutlineCurve) return 999.0;
+
     const domain = facetOutlineCurve.domain;
     const tMin = domain[0];
     const tMax = domain[1];
+
+    // Ternary search for tPeak
     let lowT = tMin;
     let highT = tMax;
-    for (let iter = 0; iter < 20; iter++) {
+    for (let iter = 0; iter < 16; iter++) {
       const t1 = lowT + (highT - lowT) / 3;
       const t2 = highT - (highT - lowT) / 3;
       if (facetOutlineCurve.pointAt(t1)[0] < facetOutlineCurve.pointAt(t2)[0]) {
@@ -81,82 +86,23 @@ export class Cockpit extends KayakGeometry {
       }
     }
     const tPeak = (lowT + highT) / 2;
+    const xPeak = facetOutlineCurve.pointAt(tPeak)[0];
 
-    const X_peak = facetOutlineCurve.pointAt(tPeak)[0];
+    if (xVal >= xPeak) return 0.0;
 
-    // Helper to evaluate normal offset point at t
-    const getOffsetPointAtT = (tVal: number, offsetDist: number): { x: number, y: number } => {
-      const pt = facetOutlineCurve.pointAt(tVal);
-      const px = pt[0];
-      const py = pt[2]; // Z is width
-
-      const dt = (tMax - tMin) * 0.005;
-      const t1 = Math.max(tMin, tVal - dt);
-      const t2 = Math.min(tPeak, tVal + dt);
-      const pt1 = facetOutlineCurve.pointAt(t1);
-      const pt2 = facetOutlineCurve.pointAt(t2);
-
-      const dx = pt2[0] - pt1[0];
-      const dy = pt2[2] - pt1[2]; // Z is width
-      const len = Math.sqrt(dx * dx + dy * dy) || 1.0;
-
-      // Inward normal: since py < 0, inward means pointing in the positive Y direction
-      const nx = -dy / len;
-      const ny = dx / len;
-
-      return {
-        x: px + offsetDist * nx,
-        y: py + offsetDist * ny
-      };
-    };
-
-    const getCockpitBoundaryYAtX = (xVal: number): number => {
-      // Peak offset is at X_peak - 1.0 (since tangent at peak is vertical)
-      const coamingPeakX = X_peak - 1.0;
-      if (xVal >= coamingPeakX) {
-        return 0.0;
-      }
-      let low = tMin;
-      let high = tPeak;
-      for (let iter = 0; iter < 16; iter++) {
-        const t = (low + high) / 2;
-        const ptOff = getOffsetPointAtT(t, 1.0);
-        if (ptOff.x < xVal) {
-          low = t;
-        } else {
-          high = t;
-        }
-      }
+    let low = tMin;
+    let high = tPeak;
+    for (let iter = 0; iter < 16; iter++) {
       const t = (low + high) / 2;
-      return Math.abs(getOffsetPointAtT(t, 1.0).y);
-    };
-
-    if (x >= cpCenterX) {
-      return getCockpitBoundaryYAtX(x);
-    } else {
-      // Back half: rounded semi-ellipse closed out smoothly from the midpoint
-      const xc = x - cpCenterX;
-      const a = cpLength / 2;
-      const b = Math.max(0.0, getCockpitBoundaryYAtX(cpCenterX));
-      if (b <= 0.0) return 0.0;
-
-      // Calculate tangent slope of the front half at cpCenterX to match it smoothly
-      let S_front = 0.0;
-      const coamingPeakX = X_peak - 1.0;
-      if (coamingPeakX > cpCenterX) {
-        const dx = Math.min(0.05, (coamingPeakX - cpCenterX) * 0.1);
-        const yCenter = b;
-        const yForward = getCockpitBoundaryYAtX(cpCenterX + dx);
-        S_front = (yForward - yCenter) / dx;
+      const px = facetOutlineCurve.pointAt(t)[0];
+      if (px < xVal) {
+        low = t;
+      } else {
+        high = t;
       }
-
-      // Smoothly interpolate the width using the tangent
-      const ratio = (xc * xc) / (a * a || 1);
-      if (ratio >= 1.0) return 0.0;
-
-      const widthFactor = Math.exp((S_front * xc) / b);
-      return b * widthFactor * Math.sqrt(1.0 - ratio);
     }
+    const finalT = (low + high) / 2;
+    return Math.abs(facetOutlineCurve.pointAt(finalT)[2]);
   }
 
   /**
@@ -167,10 +113,10 @@ export class Cockpit extends KayakGeometry {
     sternDeckZ: number,
     slope: number,
     halfL: number,
-    getGunwaleAndDeckHeight: (x: number) => { gunwaleY: number; gunwaleZ: number; deckZ: number; yFlat: number },
+    _getGunwaleAndDeckHeight?: (x: number) => { gunwaleY: number; gunwaleZ: number; deckZ: number; yFlat: number },
     facetOutlineCurve?: any
   ): MeshData {
-    const N = 40;
+    const N = 48;
     const coamingVertices: number[] = [];
     const coamingIndices: number[] = [];
     const uvs: number[] = [];
@@ -178,7 +124,7 @@ export class Cockpit extends KayakGeometry {
     const activeCpStart = params.cockpitStart;
     const cpLength = params.cockpitLength;
     const cpCenterX = activeCpStart + cpLength / 2;
-    const activeCpEnd = activeCpStart + cpLength;
+    const halfCpL = cpLength / 2;
 
     const getPlaneZ = (xVal: number) => {
       return sternDeckZ + xVal * slope;
@@ -191,47 +137,14 @@ export class Cockpit extends KayakGeometry {
 
     const coamingHeight = params.coamingHeight !== undefined ? params.coamingHeight : 0.75;
 
-    // Find the exact X where the coaming peak should be (offset 1" from the facet outline peak)
-    let coamingMaxX = activeCpEnd - 1.0;
-    if (facetOutlineCurve) {
-      const domain = facetOutlineCurve.domain;
-      const tMin = domain[0];
-      const tMax = domain[1];
-      let lowT = tMin;
-      let highT = tMax;
-      for (let iter = 0; iter < 20; iter++) {
-        const t1 = lowT + (highT - lowT) / 3;
-        const t2 = highT - (highT - lowT) / 3;
-        if (facetOutlineCurve.pointAt(t1)[0] < facetOutlineCurve.pointAt(t2)[0]) {
-          lowT = t1;
-        } else {
-          highT = t2;
-        }
-      }
-      const tPeak = (lowT + highT) / 2;
-      const X_peak = facetOutlineCurve.pointAt(tPeak)[0];
-      coamingMaxX = X_peak - 1.0;
-    }
-
-    const L_front = coamingMaxX - cpCenterX;
-    const L_back = cpCenterX - activeCpStart;
-
     for (let i = 0; i < N; i++) {
       const angle = (i / N) * Math.PI * 2;
       const cosA = Math.cos(angle);
 
-      let xVal = cpCenterX;
-      if (cosA >= 0) {
-        // Front half: spans from cpCenterX to coamingMaxX
-        xVal = cpCenterX + L_front * cosA;
-      } else {
-        // Back half: spans from cpCenterX to activeCpStart
-        xVal = cpCenterX + L_back * cosA;
-      }
-
+      const xVal = cpCenterX + halfCpL * cosA;
       const zVal = getPlaneZ(xVal); // height of flat deck trimming plane at X
 
-      // Evaluate the smooth cockpit boundary half-width using getCockpitBoundaryY
+      // Evaluate the smooth cockpit boundary half-width
       const activeYc = this.getCockpitBoundaryY(xVal, params, facetOutlineCurve);
 
       // Mirror the sign of the angle
@@ -272,7 +185,7 @@ export class Cockpit extends KayakGeometry {
     return {
       vertices: new Float32Array(coamingVertices),
       indices: new Uint32Array(coamingIndices),
-      normals: new Float32Array(coamingVertices.length), // calculated inside Three.js
+      normals: new Float32Array(coamingVertices.length),
       uvs: new Float32Array(uvs)
     };
   }
@@ -289,37 +202,15 @@ export class Cockpit extends KayakGeometry {
     const activeCpStart = params.cockpitStart;
     const activeCpEnd = activeCpStart + params.cockpitLength;
 
-    // Find the exact X where the coaming peak is
-    let coamingMaxX = activeCpEnd - 1.0;
-    if (facetOutlineCurve) {
-      const domain = facetOutlineCurve.domain;
-      const tMin = domain[0];
-      const tMax = domain[1];
-      let lowT = tMin;
-      let highT = tMax;
-      for (let iter = 0; iter < 20; iter++) {
-        const t1 = lowT + (highT - lowT) / 3;
-        const t2 = highT - (highT - lowT) / 3;
-        if (facetOutlineCurve.pointAt(t1)[0] < facetOutlineCurve.pointAt(t2)[0]) {
-          lowT = t1;
-        } else {
-          highT = t2;
-        }
-      }
-      const tPeak = (lowT + highT) / 2;
-      const X_peak = facetOutlineCurve.pointAt(tPeak)[0];
-      coamingMaxX = X_peak - 1.0;
-    }
-
     const pts = new this.rhino.Point3dList();
-    const numPoints = 80; // High resolution for smooth trimming
+    const numPoints = 64;
 
     // 1. Left boundary points (stepping forward, y < 0)
     for (let i = 0; i <= numPoints; i++) {
       const pct = i / numPoints;
-      // Cosine spacing to cluster points near the ends where curvature is highest
+      // Cosine spacing to cluster points near ends
       const t = (1.0 - Math.cos(pct * Math.PI)) / 2.0;
-      const x = activeCpStart + t * (coamingMaxX - activeCpStart);
+      const x = activeCpStart + t * (activeCpEnd - activeCpStart);
       const planeZ = getPlaneZ(x);
       const yVal = this.getCockpitBoundaryY(x, params, facetOutlineCurve);
       pts.add(x, planeZ, -yVal);
@@ -329,7 +220,7 @@ export class Cockpit extends KayakGeometry {
     for (let i = numPoints; i >= 0; i--) {
       const pct = i / numPoints;
       const t = (1.0 - Math.cos(pct * Math.PI)) / 2.0;
-      const x = activeCpStart + t * (coamingMaxX - activeCpStart);
+      const x = activeCpStart + t * (activeCpEnd - activeCpStart);
       const planeZ = getPlaneZ(x);
       const yVal = this.getCockpitBoundaryY(x, params, facetOutlineCurve);
       pts.add(x, planeZ, yVal);
@@ -342,11 +233,6 @@ export class Cockpit extends KayakGeometry {
     // Create closed cubic NURBS curve
     this.curve = this.rhino.NurbsCurve.create(false, 3, pts);
     pts.delete();
-
-    // Find tPeak of this.curve (where X is maximum)
-    if (this.curve) {
-      const domain = this.curve.domain;
-      this.tPeak = (domain[0] + domain[1]) / 2;
-    }
   }
 }
+

@@ -14,10 +14,11 @@ export interface KayakParameters {
   hullVerticalCurvature: number;   // 0 to 1 (shapes chine sharpness)
   deckVerticalCurvature: number;   // 0 to 1 (crown height of the deck)
   deckLongitudinalPeak: number;    // 0 to 1 (relative X position of max deck height)
+  facetOffsetForward?: number;     // inches forward of deck crown point for trimming facet (6 to 30, default: 24)
 
   // Cockpit
   cockpitLength: number;        // inches (e.g., 34)
-  cockpitWidth: number;         // inches (e.g., 19)
+  cockpitWidth: number;         // 0.20 to 1.0 (percentage factor of maximum flat facet width, default: 1.0)
   cockpitStart: number;         // inches from stern (e.g., 78)
 
   // Ribs / Stations
