@@ -20,6 +20,7 @@ export interface KayakParameters {
   cockpitLength: number;        // inches (e.g., 34)
   cockpitWidth: number;         // 0.20 to 1.0 (percentage factor of maximum flat facet width, default: 1.0)
   cockpitStart: number;         // inches from stern (e.g., 78)
+  cockpitAftShape?: number;     // 0.0 (rounded ellipse) to 1.0 (keyhole with rounded corners), default: 0.0
 
   // Ribs / Stations
   ribSpacing: number;           // spacing in inches (e.g., 12)

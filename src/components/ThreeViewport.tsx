@@ -423,13 +423,30 @@ export default function ThreeViewport({
     if (showRibsRef.current) {
       const facetPoints: THREE.Vector3[] = [];
       if (builder.facetOutlineCurve) {
-        const facetDivs = 80;
+        const facetDivs = 160;
         const domain = builder.facetOutlineCurve.domain;
         for (let i = 0; i <= facetDivs; i++) {
           const t = domain[0] + (i / facetDivs) * (domain[1] - domain[0]);
           const pt = builder.facetOutlineCurve.pointAt(t);
+          const xVal = pt[0];
+          const yVal = pt[2];
+
+          // Evaluate deck height at (xVal, yVal) to ensure the line lays right on the deck
+          const gunLeft = builder.gunwale.getLeftPointAtX(xVal);
+          const gunwaleY = Math.abs(gunLeft.y);
+          const gunwaleZ = gunLeft.z;
+          const dPtUntrimmed = builder.deckLine.getUntrimmedPointAtX(xVal);
+          const deckZ_untrimmed = dPtUntrimmed.z;
+          const pPower = 1.0 + builder.params.deckVerticalCurvature * 2.2;
+          const absY = Math.abs(yVal);
+          const yPct = absY / (gunwaleY || 1.0);
+          const vz_untrimmed = deckZ_untrimmed - (deckZ_untrimmed - gunwaleZ) * Math.pow(yPct, pPower);
+          const planeZ = builder.sternDeckZ + xVal * builder.slope;
+          const deckZ = Math.min(vz_untrimmed, planeZ);
+
           // Map to Three.js coordinates: X = length - halfL, Y = height, Z = width
-          facetPoints.push(new THREE.Vector3(pt[0] - halfL, pt[1], pt[2]));
+          // 0.01" micro-offset prevents z-fighting with the shaded deck mesh
+          facetPoints.push(new THREE.Vector3(xVal - halfL, deckZ + 0.01, yVal));
         }
       }
 

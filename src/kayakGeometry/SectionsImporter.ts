@@ -21,10 +21,10 @@ export class SectionsImporter {
   public sections: Section[] = [];
   public L: number = 168.0;
 
-  constructor(jsonData: any, L = 168.0) {
-    this.L = L;
+  constructor(jsonData: any, _L = 168.0) {
+    this.L = 168.0; // The scan data is natively in 168.0" coordinates
     if (jsonData && jsonData.sections) {
-      // Map section X coordinates from JSON (reversing direction: X_builder = L - X_json)
+      // Map section X coordinates from JSON (reversing direction: X_builder = 168.0 - X_json)
       this.sections = jsonData.sections.map((s: any) => {
         const rawPoints: SectionPoint[] = s.points || [];
         const sorted = [...rawPoints].sort((a, b) => a.y - b.y);
@@ -32,7 +32,7 @@ export class SectionsImporter {
         if (sorted.length === 0) {
           const defaultPt = { y: 0.0, z: 8.0 };
           return {
-            x: this.L - s.x,
+            x: 168.0 - s.x,
             points: [defaultPt],
             gunwaleLeft: defaultPt,
             gunwaleRight: defaultPt,

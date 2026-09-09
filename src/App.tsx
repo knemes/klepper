@@ -39,6 +39,7 @@ export default function App() {
     cockpitLength: 34,
     cockpitWidth: 1.0,      // 100% of max flat facet width
     cockpitStart: 59,       // inches from stern
+    cockpitAftShape: 0.0,   // 0.0 (rounded ellipse) to 1.0 (keyhole with rounded corners)
     ribSpacing: 12,
     plywoodThickness: 0.75, // 3/4" plywood
     coamingHeight: 0.75,    // 3/4" coaming height
@@ -70,6 +71,24 @@ export default function App() {
       const next = { ...prev, [key]: value };
 
       // Validation constraints
+      if (key === "length") {
+        const newLength = Math.max(10, Math.min(20, value));
+        const scaleRatio = newLength / (prev.length || 14);
+        next.length = newLength;
+
+        // Scale aft facet offset proportionally with length
+        next.facetOffsetForward = Math.round(((prev.facetOffsetForward ?? (24 * (prev.length / 14))) * scaleRatio) * 10) / 10;
+
+        // Scale bow and stern stem lengths proportionally
+        next.bowLength = Math.max(8, Math.round(prev.bowLength * scaleRatio));
+        next.sternLength = Math.max(6, Math.round(prev.sternLength * scaleRatio));
+
+        // Scale cockpit dimensions proportionally so it fits naturally on scaled deck
+        const minCpL = Math.max(20, Math.round(24 * (newLength / 14)));
+        next.cockpitLength = Math.max(minCpL, Math.round(prev.cockpitLength * scaleRatio));
+        next.cockpitStart = Math.max(Math.round(next.sternLength), Math.round(prev.cockpitStart * scaleRatio));
+      }
+
       if (key === "beam") {
         next.beam = Math.max(18, Math.min(36, value));
       }
@@ -88,11 +107,17 @@ export default function App() {
       }
 
       if (key === "facetOffsetForward") {
-        next.facetOffsetForward = Math.max(6, Math.min(30, value));
+        const minOffset = Math.max(4, Math.round(6 * (next.length / 14)));
+        const maxOffset = Math.max(20, Math.round(36 * (next.length / 14)));
+        next.facetOffsetForward = Math.max(minOffset, Math.min(maxOffset, value));
       }
 
       if (key === "cockpitWidth") {
         next.cockpitWidth = Math.max(0.20, Math.min(1.0, value));
+      }
+
+      if (key === "cockpitAftShape") {
+        next.cockpitAftShape = Math.max(0.0, Math.min(1.0, value));
       }
 
       const L_in = next.length * 12;
@@ -101,17 +126,29 @@ export default function App() {
       next.deckLongitudinalPeak = Math.max(0.30, Math.min(0.70, next.deckLongitudinalPeak));
       const peakX = next.deckLongitudinalPeak * L_in;
 
-      // 2. Facet trimming plane extends facetOffsetForward (6" to 30") forward of deck crown point
-      const facetOffset = next.facetOffsetForward ?? 24;
+      // 2. Facet trimming plane extends facetOffsetForward (scales proportionally with boat length)
+      const minFacetOffset = Math.max(4, Math.round(6 * (next.length / 14)));
+      const maxFacetOffset = Math.max(20, Math.round(36 * (next.length / 14)));
+      const facetOffset = Math.max(minFacetOffset, Math.min(maxFacetOffset, next.facetOffsetForward ?? (24 * (next.length / 14))));
+      next.facetOffsetForward = facetOffset;
       const facetStartX = Math.min(L_in - 4.0, peakX + facetOffset);
 
-      // 3. Cockpit coaming position hard rule: front of cockpit must be at least 1" behind peak of facet
-      const minCpStart = Math.max(12, Math.round(next.sternLength));
-      const maxCpStart = Math.max(minCpStart, Math.floor(facetStartX - next.cockpitLength - 1.0));
+      // 3. Cockpit coaming position hard rule: front of cockpit must NEVER touch the front part of the aft deck facet
+      // Enforce at least 4.0 inches of clearance between forward edge of cockpit and facet apex
+      const COCKPIT_FACET_CLEARANCE = 4.0;
+      const minCpStart = Math.max(8, Math.round(next.sternLength));
+
+      // Minimum cockpit length adapts down to 20" on shorter 10 ft boats so it always fits
+      const minCpLength = Math.max(20, Math.round(24 * (next.length / 14)));
+      const maxAllowedCpLength = Math.max(minCpLength, Math.floor(facetStartX - minCpStart - COCKPIT_FACET_CLEARANCE));
+      next.cockpitLength = Math.max(minCpLength, Math.min(maxAllowedCpLength, next.cockpitLength));
+
+      const maxCpStart = Math.max(minCpStart, Math.floor(facetStartX - next.cockpitLength - COCKPIT_FACET_CLEARANCE));
       next.cockpitStart = Math.max(minCpStart, Math.min(maxCpStart, next.cockpitStart));
 
-      // 4. Ensure cockpit width factor is valid percentage [0.20, 1.0]
+      // 4. Ensure cockpit width factor and aft shape are valid
       next.cockpitWidth = Math.max(0.20, Math.min(1.0, next.cockpitWidth ?? 1.0));
+      next.cockpitAftShape = Math.max(0.0, Math.min(1.0, next.cockpitAftShape ?? 0.0));
 
       return next;
     });

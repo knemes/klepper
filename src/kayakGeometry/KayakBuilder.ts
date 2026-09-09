@@ -615,36 +615,32 @@ export class KayakBuilder {
 
   /**
    * Constructs a closed cubic NURBS curve outlining the boundary of the flat trimmed deck facet.
-   * Runs forward along the left edge, loops at the peak, and returns along the right edge.
-   * Samples only at the actual station intervals to allow the cubic spline solver to generate a fair, smooth arc.
+   * This is the exact mathematical 3D intersection curve between the tilted trimming plane and the crowned deck.
+   * Uses quarter-sine parameterization to cluster points smoothly near the forward apex (facetStartX),
+   * ensuring a smooth, fair continuous curve that lies precisely on the deck surface.
    */
   public buildFacetOutline() {
     const pts = new this.rhino.Point3dList();
+    const numPoints = 80;
 
-    // Generate smooth sampling coordinates along the facet length
-    const xVals: number[] = [];
-    const numSteps = 40;
-    for (let i = 0; i < numSteps; i++) {
-      xVals.push((i / numSteps) * this.facetStartX);
-    }
-
-    // 1. Left boundary points
-    for (let i = 0; i < xVals.length; i++) {
-      const x = xVals[i];
+    // 1. Left boundary points (stepping forward from stern to facet apex, y < 0)
+    for (let i = 0; i <= numPoints; i++) {
+      const pct = i / numPoints;
+      // Quarter-sine parameterization clusters points densely near facetStartX
+      const t = Math.sin(pct * Math.PI * 0.5);
+      const x = t * this.facetStartX;
       const planeZ = this.sternDeckZ + x * this.slope;
       const gunLeft = this.gunwale.getLeftPointAtX(x);
       const dPtUntrimmed = this.deckLine.getUntrimmedPointAtX(x);
-      const yFlat = this.getFlatPlaneWidth(x, planeZ, Math.abs(gunLeft.y), dPtUntrimmed.z);
+      const yFlat = i === numPoints ? 0.0 : this.getFlatPlaneWidth(x, planeZ, Math.abs(gunLeft.y), dPtUntrimmed.z);
       pts.add(x, planeZ, -yFlat);
     }
 
-    // Peak vertex
-    const peakZ = this.sternDeckZ + this.facetStartX * this.slope;
-    pts.add(this.facetStartX, peakZ, 0.0);
-
-    // 2. Right boundary points (stepping backward)
-    for (let i = xVals.length - 1; i >= 0; i--) {
-      const x = xVals[i];
+    // 2. Right boundary points (stepping backward from facet apex to stern, y > 0)
+    for (let i = numPoints - 1; i >= 0; i--) {
+      const pct = i / numPoints;
+      const t = Math.sin(pct * Math.PI * 0.5);
+      const x = t * this.facetStartX;
       const planeZ = this.sternDeckZ + x * this.slope;
       const gunLeft = this.gunwale.getLeftPointAtX(x);
       const dPtUntrimmed = this.deckLine.getUntrimmedPointAtX(x);
@@ -659,7 +655,7 @@ export class KayakBuilder {
     const startYFlat = this.getFlatPlaneWidth(0, startPlaneZ, Math.abs(startGunLeft.y), startDPtUntrimmed.z);
     pts.add(0, startPlaneZ, -startYFlat);
 
-    // Create cubic NURBS curve
+    // Create closed cubic NURBS curve
     this.facetOutlineCurve = this.rhino.NurbsCurve.create(false, 3, pts);
     pts.delete();
   }

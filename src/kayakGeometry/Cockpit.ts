@@ -36,11 +36,19 @@ export class Cockpit extends KayakGeometry {
     // Evaluate normalized longitudinal curve profile (teardrop / keyhole)
     let shape = 0.0;
     if (x <= cpCenterX) {
-      // Aft half: rounded semi-ellipse
+      // Aft half: smoothly blends between a pure interpolated ellipse (0.0)
+      // and a touring keyhole cockpit with two rounded corners and straighter sides (1.0).
+      // Uses superellipse formulation: (1 - u^p)^(1/p) where p varies from 2.0 (ellipse) to 7.0 (rounded corners & straight sides).
+      // Guarantees:
+      //  1. At x = cpCenterX (u = 0): shape = 1.0 and d(shape)/dx = 0, exactly matching the forward curve tangent.
+      //  2. At x = activeCpStart (u = 1): shape = 0.0 and dx/d(shape) = 0, joining symmetrically across the centerline.
+      const aftSquareness = Math.max(0.0, Math.min(1.0, params.cockpitAftShape ?? 0.0));
       const a = cpCenterX - activeCpStart;
-      const dx = cpCenterX - x;
-      const ratio = Math.min(1.0, (dx * dx) / (a * a || 1.0));
-      shape = Math.sqrt(Math.max(0.0, 1.0 - ratio));
+      const dx = Math.max(0.0, cpCenterX - x);
+      const u = Math.min(1.0, dx / (a || 1.0));
+
+      const p = 2.0 + aftSquareness * 5.0; // 2.0 (pure ellipse) to 7.0 (rounded corners & straight sides)
+      shape = Math.pow(Math.max(0.0, 1.0 - Math.pow(u, p)), 1.0 / p);
     } else {
       // Forward half: tapered egg/hoop shape
       const a = activeCpEnd - cpCenterX;
@@ -116,7 +124,7 @@ export class Cockpit extends KayakGeometry {
     _getGunwaleAndDeckHeight?: (x: number) => { gunwaleY: number; gunwaleZ: number; deckZ: number; yFlat: number },
     facetOutlineCurve?: any
   ): MeshData {
-    const N = 48;
+    const N = 64;
     const coamingVertices: number[] = [];
     const coamingIndices: number[] = [];
     const uvs: number[] = [];
@@ -203,7 +211,7 @@ export class Cockpit extends KayakGeometry {
     const activeCpEnd = activeCpStart + params.cockpitLength;
 
     const pts = new this.rhino.Point3dList();
-    const numPoints = 64;
+    const numPoints = 80;
 
     // 1. Left boundary points (stepping forward, y < 0)
     for (let i = 0; i <= numPoints; i++) {

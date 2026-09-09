@@ -319,13 +319,13 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
               <div className="control-group">
                 <div className="control-label-wrapper">
                   <span className="control-label">Facet Trim</span>
-                  <span className="control-value">+{params.facetOffsetForward ?? 24}" (Peak @ {Math.round(builder.facetStartX)}")</span>
+                  <span className="control-value">+{Math.round((params.facetOffsetForward ?? 24) * 10) / 10}" (Peak @ {Math.round(builder.facetStartX)}")</span>
                 </div>
                 <input
                   type="range"
-                  min="6"
-                  max="30"
-                  step="1"
+                  min={Math.max(4, Math.round(6 * (params.length / 14)))}
+                  max={Math.max(20, Math.round(36 * (params.length / 14)))}
+                  step="0.5"
                   value={params.facetOffsetForward ?? 24}
                   onChange={(e) => onParamChange("facetOffsetForward", parseFloat(e.target.value))}
                 />
@@ -346,21 +346,24 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
           </div>
 
           {expandedSection === "cockpit" && (() => {
-            const minCpStart = Math.max(12, Math.round(params.sternLength));
-            const maxCpStart = Math.max(minCpStart, Math.floor(builder.facetStartX - params.cockpitLength - 1.0));
+            const COCKPIT_FACET_CLEARANCE = 4.0;
+            const minCpLength = Math.max(20, Math.min(26, Math.round(24 * (params.length / 14))));
+            const maxCpLength = Math.max(minCpLength, Math.min(Math.round(48 * (params.length / 14)), Math.floor(builder.facetStartX - params.cockpitStart - COCKPIT_FACET_CLEARANCE)));
+            const minCpStart = Math.max(8, Math.round(params.sternLength));
+            const maxCpStart = Math.max(minCpStart, Math.floor(builder.facetStartX - params.cockpitLength - COCKPIT_FACET_CLEARANCE));
             return (
             <div className="sidebar-content">
               <div className="control-group">
                 <div className="control-label-wrapper">
                   <span className="control-label">Cockpit Length</span>
-                  <span className="control-value">{params.cockpitLength} in</span>
+                  <span className="control-value">{Math.round(params.cockpitLength)} in</span>
                 </div>
                 <input
                   type="range"
-                  min="28"
-                  max="48"
+                  min={minCpLength}
+                  max={maxCpLength}
                   step="1"
-                  value={params.cockpitLength}
+                  value={Math.round(params.cockpitLength)}
                   onChange={(e) => onParamChange("cockpitLength", parseFloat(e.target.value))}
                 />
               </div>
@@ -383,15 +386,37 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
               <div className="control-group">
                 <div className="control-label-wrapper">
                   <span className="control-label">Position from Stern</span>
-                  <span className="control-value">{params.cockpitStart} in</span>
+                  <span className="control-value">{Math.round(params.cockpitStart)} in</span>
                 </div>
                 <input
                   type="range"
                   min={minCpStart}
                   max={maxCpStart}
                   step="1"
-                  value={Math.max(minCpStart, Math.min(maxCpStart, params.cockpitStart))}
+                  value={Math.round(Math.max(minCpStart, Math.min(maxCpStart, params.cockpitStart)))}
                   onChange={(e) => onParamChange("cockpitStart", parseFloat(e.target.value))}
+                />
+              </div>
+
+              <div className="control-group">
+                <div className="control-label-wrapper">
+                  <span className="control-label">Back Rim Shape</span>
+                  <span className="control-value">
+                    {(() => {
+                      const val = params.cockpitAftShape ?? 0.0;
+                      if (val <= 0.04) return "Rounded";
+                      if (val >= 0.96) return "Square / Keyhole";
+                      return `${Math.round(val * 100)}% (Blended)`;
+                    })()}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.0"
+                  max="1.0"
+                  step="0.02"
+                  value={params.cockpitAftShape ?? 0.0}
+                  onChange={(e) => onParamChange("cockpitAftShape", parseFloat(e.target.value))}
                 />
               </div>
 
