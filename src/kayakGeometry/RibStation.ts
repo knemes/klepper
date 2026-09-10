@@ -201,8 +201,11 @@ export class RibStation extends KayakGeometry {
    * Generates a 2D SVG template representation of this station frame.
    * Subtracts the cedar strip planking thickness (0.25") and adds structural notches.
    */
-  public generateSVG(params: KayakParameters): string {
-    const pt = params.plywoodThickness;
+  /**
+   * Generates a clean 2D SVG template representation of this station frame.
+   * Shows only the station outline on a minimal architectural XY grid.
+   */
+  public generateSVG(_params?: KayakParameters): string {
     const stripThickness = 0.25;
 
     const offsetPoints = (pts: Point3D[]) => {
@@ -216,11 +219,19 @@ export class RibStation extends KayakGeometry {
 
     const profilePts = offsetPoints(this.closedProfile);
 
-    // Calculate dimensions
-    const minY = -params.beam / 2.0 - 2.0;
-    const maxY = params.beam / 2.0 + 2.0;
-    const minZ = this.keelPt.z - 2.0;
-    const maxZ = this.deckPt.z + 2.0;
+    // Calculate extents based on actual station profile with tight, clean margin
+    const ribHalfWidth = Math.max(...profilePts.map(p => Math.abs(p.y)));
+    const ribMinZ = Math.min(...profilePts.map(p => p.z));
+    const ribMaxZ = Math.max(...profilePts.map(p => p.z));
+    const stationBeam = ribHalfWidth * 2.0;
+    const stationHeight = ribMaxZ - ribMinZ;
+
+    const padY = 2.0;
+    const padZ = 1.5;
+    const minY = -ribHalfWidth - padY;
+    const maxY = ribHalfWidth + padY;
+    const minZ = Math.min(0, ribMinZ) - padZ;
+    const maxZ = ribMaxZ + padZ;
 
     const width = maxY - minY;
     const height = maxZ - minZ;
@@ -229,40 +240,50 @@ export class RibStation extends KayakGeometry {
     const svgX = (y: number) => (y - minY).toFixed(2);
     const svgY = (z: number) => (maxZ - z).toFixed(2);
 
-    // Outer continuous closed frame path
+    // Continuous closed station contour
     let dClosed = `M ${svgX(profilePts[0].y)} ${svgY(profilePts[0].z)}`;
     for (let i = 1; i < profilePts.length; i++) {
       dClosed += ` L ${svgX(profilePts[i].y)} ${svgY(profilePts[i].z)}`;
     }
     dClosed += " Z";
 
-    const centerlinePath = `M ${svgX(0)} ${svgY(minZ)} L ${svgX(0)} ${svgY(maxZ)}`;
-    const waterlinePath = `M ${svgX(minY)} ${svgY(params.hullHeight)} L ${svgX(maxY)} ${svgY(params.hullHeight)}`;
+    // 2-inch orthogonal grid lines
+    const gridLines: string[] = [];
+    const gridStep = 2.0;
+    const startGridY = Math.ceil(minY / gridStep) * gridStep;
+    const endGridY = Math.floor(maxY / gridStep) * gridStep;
+    for (let gy = startGridY; gy <= endGridY; gy += gridStep) {
+      if (Math.abs(gy) < 0.01) continue; // skip centerline, drawn distinctly
+      gridLines.push(
+        `<line x1="${svgX(gy)}" y1="${svgY(minZ)}" x2="${svgX(gy)}" y2="${svgY(maxZ)}" stroke="#E2E7DF" stroke-width="0.75" vector-effect="non-scaling-stroke" />`
+      );
+    }
+
+    const startGridZ = Math.ceil(minZ / gridStep) * gridStep;
+    const endGridZ = Math.floor(maxZ / gridStep) * gridStep;
+    for (let gz = startGridZ; gz <= endGridZ; gz += gridStep) {
+      if (Math.abs(gz) < 0.01) continue; // skip baseline, drawn distinctly
+      gridLines.push(
+        `<line x1="${svgX(minY)}" y1="${svgY(gz)}" x2="${svgX(maxY)}" y2="${svgY(gz)}" stroke="#E2E7DF" stroke-width="0.75" vector-effect="non-scaling-stroke" />`
+      );
+    }
 
     return `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width.toFixed(1)} ${height.toFixed(1)}" width="100%" height="100%">
-        <rect width="100%" height="100%" fill="#F4F6F0" />
-        <!-- CAD grids -->
-        <line x1="${svgX(minY)}" y1="${svgY(0)}" x2="${svgX(maxY)}" y2="${svgY(0)}" stroke="#EAE7DF" stroke-width="0.5" stroke-dasharray="2,2" />
-        <line x1="${svgX(-12)}" y1="${svgY(minZ)}" x2="${svgX(-12)}" y2="${svgY(maxZ)}" stroke="#EAE7DF" stroke-width="0.5" stroke-dasharray="2,2" />
-        <line x1="${svgX(12)}" y1="${svgY(minZ)}" x2="${svgX(12)}" y2="${svgY(maxZ)}" stroke="#EAE7DF" stroke-width="0.5" stroke-dasharray="2,2" />
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width.toFixed(2)} ${height.toFixed(2)}" width="100%" height="100%" style="background-color: #fafbf9;">
+        <!-- 2-Inch XY Grid -->
+        <g class="xy-grid">
+          ${gridLines.join("\n          ")}
+        </g>
 
-        <!-- Reference Marks -->
-        <path d="${centerlinePath}" stroke="#2C4A3E" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.6" />
-        <path d="${waterlinePath}" stroke="#8FBC8F" stroke-width="0.5" stroke-dasharray="5,5" opacity="0.8" />
-        <text x="${svgX(0)}" y="${svgY(maxZ - 0.5)}" font-family="monospace" font-size="1.2" fill="#2C4A3E" text-anchor="middle">CL</text>
-        <text x="${svgX(maxY - 1)}" y="${svgY(params.hullHeight - 0.2)}" font-family="monospace" font-size="1" fill="#8FBC8F" text-anchor="end">WATERLINE (WL)</text>
+        <!-- Centerline Axis (CL) & Keel Baseline (Z=0) -->
+        <line x1="${svgX(0)}" y1="${svgY(minZ)}" x2="${svgX(0)}" y2="${svgY(maxZ)}" stroke="#9EABA2" stroke-width="1" stroke-dasharray="5,3" vector-effect="non-scaling-stroke" />
+        <line x1="${svgX(minY)}" y1="${svgY(0)}" x2="${svgX(maxY)}" y2="${svgY(0)}" stroke="#9EABA2" stroke-width="1" vector-effect="non-scaling-stroke" />
 
-        <!-- Outer Closed Frame Cut -->
-        <path d="${dClosed}" fill="none" stroke="#14231A" stroke-width="1.5" />
+        <!-- Station Outline -->
+        <path d="${dClosed}" fill="rgba(20, 35, 26, 0.03)" stroke="#14231A" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
 
-        <!-- Strongback Alignment Notch -->
-        <rect x="${svgX(-1.5)}" y="${svgY(this.deckPt.z - 4)}" width="3" height="3" fill="none" stroke="#FF7A5C" stroke-width="1" />
-        <text x="${svgX(0)}" y="${svgY(this.deckPt.z - 2.5)}" font-family="monospace" font-size="0.8" fill="#FF7A5C" text-anchor="middle">3" STRONGBACK NOTCH</text>
-
-        <!-- Labels -->
-        <text x="${svgX(0)}" y="${svgY(this.keelPt.z + 3)}" font-family="serif" font-size="2" fill="#14231A" text-anchor="middle" font-style="italic">Station ${((this.x) / 12).toFixed(1)}'</text>
-        <text x="${svgX(0)}" y="${svgY(this.keelPt.z + 1.5)}" font-family="monospace" font-size="1" fill="#2C4A3E" text-anchor="middle">X: ${this.x.toFixed(1)}" | ply: ${pt}"</text>
+        <!-- Minimal Technical Label -->
+        <text x="${(1.0).toFixed(2)}" y="${(height - 0.6).toFixed(2)}" font-family="JetBrains Mono, monospace, sans-serif" font-size="0.65" fill="#6B786E" letter-spacing="0.05">STA ${(this.x / 12).toFixed(2)}' [x=${this.x.toFixed(1)}"] | B:${stationBeam.toFixed(1)}" H:${stationHeight.toFixed(1)}" | 2" GRID</text>
       </svg>
     `;
   }

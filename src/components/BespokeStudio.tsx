@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Download, Compass, Box } from "lucide-react";
+import { Download, Compass, Box, ChevronDown, ChevronUp } from "lucide-react";
 import type { KayakParameters } from "../kayakGeometry/types";
 import { KayakBuilder } from "../kayakGeometry/KayakBuilder";
 import ThreeViewport from "./ThreeViewport";
@@ -18,6 +18,7 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
   const [showDimensions, setShowDimensions] = useState<boolean>(true);
   const [selectedRibIndex, setSelectedRibIndex] = useState<number>(3);
   const [expandedSection, setExpandedSection] = useState<string>("dimensions");
+  const [showHydroPanel, setShowHydroPanel] = useState<boolean>(true);
 
   const [cargoWeight, setCargoWeight] = useState<number>(180);
   const [hullWeight, setHullWeight] = useState<number>(45);
@@ -439,9 +440,9 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
           })()}
         </div>
 
-        {/* Section 5: Manufacturing Cutlist */}
-        <div className="sidebar-section">
-          <h2 className="sidebar-section-title" style={{ marginBottom: "1rem" }}>05. Station Cut-List</h2>
+        {/* Section 5: Manufacturing Cutlist & Exports */}
+        <div className="sidebar-section" style={{ borderBottom: "none" }}>
+          <h2 className="sidebar-section-title" style={{ marginBottom: "1rem" }}>05. Station Cut-List &amp; Exports</h2>
 
           <div className="control-group">
             <div className="control-label-wrapper">
@@ -488,83 +489,19 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
 
           {selectedRib && (
             <div className="ribs-viewer" style={{ marginTop: "1rem" }}>
-              <span className="stat-label">2D Template (Cedar offset applied)</span>
+              <span className="stat-label">2D Template (Minimal XY Grid)</span>
               <div className="ribs-svg-container" dangerouslySetInnerHTML={{ __html: ribSVGString }} />
               <button
                 className="btn-primary"
                 onClick={handleDownloadSVG}
                 style={{ width: "100%", marginTop: "0.5rem" }}
               >
-                <Download className="w-4 h-4" /> Download SVG
+                <Download className="w-4 h-4" /> Download Station SVG
               </button>
             </div>
           )}
-        </div>
 
-        {/* Section 6: Hydrostatics Stats */}
-        <div className="sidebar-section" style={{ borderBottom: "none" }}>
-          <h2 className="sidebar-section-title" style={{ marginBottom: "1rem" }}>06. Hydrostatic Calculations</h2>
-
-          <div className="control-group">
-            <div className="control-label-wrapper">
-              <span className="control-label">Paddler / Cargo</span>
-              <span className="control-value">{cargoWeight} lbs</span>
-            </div>
-            <input
-              type="range"
-              min="100"
-              max="300"
-              step="5"
-              value={cargoWeight}
-              onChange={(e) => setCargoWeight(parseFloat(e.target.value))}
-            />
-          </div>
-
-          <div className="control-group">
-            <div className="control-label-wrapper">
-              <span className="control-label">Hull Weight</span>
-              <span className="control-value">{hullWeight} lbs</span>
-            </div>
-            <input
-              type="range"
-              min="25"
-              max="70"
-              step="1"
-              value={hullWeight}
-              onChange={(e) => setHullWeight(parseFloat(e.target.value))}
-            />
-          </div>
-
-          <div className="stats-panel" style={{ marginTop: "1rem" }}>
-            <div className="stat-row">
-              <span className="stat-label">Target Displacement</span>
-              <span className="stat-val">{hydrostatics.displacementLbs.toFixed(0)} lbs</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">Calculated WL Draft</span>
-              <span className="stat-val">{hydrostatics.draft.toFixed(2)} in</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">Wetted Surface Area</span>
-              <span className="stat-val">{(hydrostatics.wettedSurfaceArea / 144).toFixed(2)} sq ft</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">Long. Centroid (LCB)</span>
-              <span className="stat-val">{(hydrostatics.lcb / 12).toFixed(2)} ft</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">Initial Stability (GM)</span>
-              <span className="stat-val" style={{ color: "var(--accent)" }}>{hydrostatics.gm.toFixed(2)} in</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">Stability Class</span>
-              <span className="stat-val" style={{ fontSize: "0.75rem", fontStyle: "italic" }}>
-                {hydrostatics.stabilityStatus}
-              </span>
-            </div>
-          </div>
-
-          <div style={{ marginTop: "1.5rem" }}>
+          <div style={{ marginTop: "1.25rem" }}>
             <button
               className="btn-primary"
               onClick={handleDownload3DM}
@@ -578,26 +515,123 @@ export default function BespokeStudio({ params, builder, onParamChange }: Bespok
 
       {/* Viewport Render Area */}
       <main className="viewport-area">
-        {/* View Mode Toolbar */}
-        <div className="viewport-toolbar">
-          <button
-            className={`toolbar-btn ${viewMode === "perspective" ? "active" : ""}`}
-            onClick={() => setViewMode(viewMode === "perspective" ? "perspective" : "perspective")} // toggle logic or state update
-          >
-            <Compass className="w-3.5 h-3.5 inline-block mr-1" /> ORBIT 3D
-          </button>
-          <button
-            className={`toolbar-btn ${viewMode === "plan" ? "active" : ""}`}
-            onClick={() => setViewMode("plan")}
-          >
-            PLAN (TOP)
-          </button>
-          <button
-            className={`toolbar-btn ${viewMode === "side" ? "active" : ""}`}
-            onClick={() => setViewMode("side")}
-          >
-            SIDE (PROFILE)
-          </button>
+        {/* Left Floating Controls: View Selection + Expandable Hydrostatic Calculations */}
+        <div className="viewport-left-controls">
+          {/* View Mode Toolbar */}
+          <div className="viewport-toolbar">
+            <button
+              className={`toolbar-btn ${viewMode === "perspective" ? "active" : ""}`}
+              onClick={() => setViewMode("perspective")}
+            >
+              <Compass className="w-3.5 h-3.5 inline-block mr-1" /> ORBIT 3D
+            </button>
+            <button
+              className={`toolbar-btn ${viewMode === "plan" ? "active" : ""}`}
+              onClick={() => setViewMode("plan")}
+            >
+              PLAN (TOP)
+            </button>
+            <button
+              className={`toolbar-btn ${viewMode === "side" ? "active" : ""}`}
+              onClick={() => setViewMode("side")}
+            >
+              SIDE (PROFILE)
+            </button>
+          </div>
+
+          {/* Expandable Hydrostatic Calculations Panel */}
+          <div className="hydro-floating-panel">
+            <button
+              className="hydro-header-btn"
+              onClick={() => setShowHydroPanel(!showHydroPanel)}
+              title="Toggle Hydrostatic Calculations"
+              type="button"
+            >
+              <div className="hydro-header-info">
+                <span className="hydro-indicator-dot" />
+                <span className="hydro-title-text">HYDROSTATICS</span>
+                <span className="hydro-quick-summary">
+                  Draft {hydrostatics.draft.toFixed(1)}" • GM {hydrostatics.gm.toFixed(1)}"
+                </span>
+              </div>
+              <span className="hydro-toggle-icon">
+                {showHydroPanel ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </span>
+            </button>
+
+            {showHydroPanel && (
+              <div className="hydro-panel-body">
+                {/* Weight Inputs */}
+                <div className="hydro-input-group">
+                  <div className="hydro-input-label">
+                    <span>Cargo / Paddler</span>
+                    <span className="hydro-input-val">{cargoWeight} lbs</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="100"
+                    max="300"
+                    step="5"
+                    value={cargoWeight}
+                    onChange={(e) => setCargoWeight(parseFloat(e.target.value))}
+                    className="hydro-range-input"
+                  />
+                </div>
+
+                <div className="hydro-input-group">
+                  <div className="hydro-input-label">
+                    <span>Hull Weight</span>
+                    <span className="hydro-input-val">{hullWeight} lbs</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="25"
+                    max="70"
+                    step="1"
+                    value={hullWeight}
+                    onChange={(e) => setHullWeight(parseFloat(e.target.value))}
+                    className="hydro-range-input"
+                  />
+                </div>
+
+                {/* Hydrostatic Metrics Grid */}
+                <div className="hydro-metrics-grid">
+                  <div className="hydro-metric-cell">
+                    <span className="hm-label">Displacement</span>
+                    <span className="hm-val">{hydrostatics.displacementLbs.toFixed(0)} lbs</span>
+                  </div>
+                  <div className="hydro-metric-cell">
+                    <span className="hm-label">WL Draft</span>
+                    <span className="hm-val highlight">{hydrostatics.draft.toFixed(2)}"</span>
+                  </div>
+                  <div className="hydro-metric-cell">
+                    <span className="hm-label">Wetted Area</span>
+                    <span className="hm-val">{(hydrostatics.wettedSurfaceArea / 144).toFixed(1)} sq ft</span>
+                  </div>
+                  <div className="hydro-metric-cell">
+                    <span className="hm-label">LCB</span>
+                    <span className="hm-val">{(hydrostatics.lcb / 12).toFixed(2)} ft</span>
+                  </div>
+                  <div className="hydro-metric-cell">
+                    <span className="hm-label">Initial GM</span>
+                    <span className="hm-val accent">{hydrostatics.gm.toFixed(2)}"</span>
+                  </div>
+                  <div className="hydro-metric-cell">
+                    <span className="hm-label">Category</span>
+                    <span className="hm-val class-name" style={{ fontWeight: 600, color: "var(--pine-shadow)" }}>
+                      {hydrostatics.stabilityStatus.split(":")[0]}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Guillemot Kayaks Stability Classification Banner */}
+                <div className="hydro-stability-banner">
+                  <span className="hsb-title">{hydrostatics.stabilityStatus}</span>
+                  <p className="hsb-desc">{hydrostatics.stabilityDescription}</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Visibility Overlays */}

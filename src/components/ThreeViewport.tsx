@@ -149,7 +149,8 @@ export default function ThreeViewport({
     const controls = new OrbitControls(pCamera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2 + 0.05;
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = Math.PI; // Complete unconstrained vertical orbit to underneath
     controls.minDistance = 20;
     controls.maxDistance = 450;
     controlsRef.current = controls;
@@ -175,8 +176,12 @@ export default function ThreeViewport({
     scene.add(rimLight);
 
     // Dynamic grid floor (CAD style)
-    const gridHelper = new THREE.GridHelper(300, 30, 0xb0b7b2, 0xdcdfd9);
-    gridHelper.position.y = -1.5;
+    const gridHelper = new THREE.GridHelper(340, 34, 0x9ca59e, 0xcfd4cb);
+    gridHelper.position.y = 0;
+    const gridMat = gridHelper.material as THREE.LineBasicMaterial;
+    gridMat.transparent = true;
+    gridMat.depthWrite = false;
+    gridMat.opacity = 0.55;
     scene.add(gridHelper);
 
     // Rhino style axis indicator
@@ -203,12 +208,40 @@ export default function ThreeViewport({
 
     // 6. Animation Loop
     let animationId: number;
+    const forwardVec = new THREE.Vector3();
+
     const animate = () => {
       animationId = requestAnimationFrame(animate);
       const activeCamera = viewModeRef.current === "perspective" ? pCamera : oCamera;
 
       if (viewModeRef.current === "perspective") {
+        controls.maxPolarAngle = Math.PI;
         controls.update();
+
+        // Comprehensive viewing-from-below detection:
+        // 1. Polar angle in lower hemisphere (phi > PI / 2)
+        const polarAngle = controls.getPolarAngle();
+        const orbitUnderProgress = Math.max(0, (polarAngle - Math.PI / 2) / (Math.PI / 2));
+
+        // 2. Camera position below XY grid plane (y < 0)
+        const camY = pCamera.position.y - gridHelper.position.y;
+        const posUnderProgress = camY < 0 ? Math.min(1.0, Math.abs(camY) / 20.0) : 0;
+
+        // 3. Camera pitch pointing upwards (e.g. panned down and looking up)
+        pCamera.getWorldDirection(forwardVec);
+        const lookUpProgress = Math.max(0, Math.min(1.0, forwardVec.y / 0.45));
+
+        // Combined factor: 0.0 (above/level) to 1.0 (looking up from below)
+        const belowFactor = Math.max(orbitUnderProgress, posUnderProgress, lookUpProgress);
+
+        if (belowFactor > 0.02) {
+          // Smoothly ghost down to faint 0.04
+          gridMat.opacity = THREE.MathUtils.lerp(0.55, 0.04, Math.pow(belowFactor, 0.7));
+        } else {
+          gridMat.opacity = 0.55;
+        }
+      } else {
+        gridMat.opacity = 0.45;
       }
 
       renderer.render(scene, activeCamera);
@@ -260,6 +293,8 @@ export default function ThreeViewport({
       oCameraRef.current.updateProjectionMatrix();
     } else {
       controlsRef.current.target.set(0, params.hullHeight / 3, 0);
+      controlsRef.current.maxPolarAngle = Math.PI;
+      controlsRef.current.minPolarAngle = 0;
       controlsRef.current.update();
     }
   }, [viewMode, params.length, params.hullHeight]);
@@ -490,18 +525,34 @@ export default function ThreeViewport({
     if (showPhysicsRef.current) {
       const activeDraft = draftRef.current;
 
-      // Waterline plane (semitransparent light blue)
-      const wlGeo = new THREE.PlaneGeometry(350, 90);
+      // Waterline plane (semitransparent faint sea mist, scaled to hull dimensions)
+      const planeLength = Math.max(260, L * 1.35);
+      const planeWidth = Math.max(65, currentParams.beam * 2.8);
+      const wlGeo = new THREE.PlaneGeometry(planeLength, planeWidth);
       const wlMat = new THREE.MeshBasicMaterial({
         color: 0x5a9be5,
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.10, // Faint, subtle water level
+        depthWrite: false,
         side: THREE.DoubleSide,
       });
       const wlMesh = new THREE.Mesh(wlGeo, wlMat);
       wlMesh.rotation.x = -Math.PI / 2;
       wlMesh.position.set(0, activeDraft, 0);
       group.add(wlMesh);
+
+      // Subtle water plane edge frame for clean CAD presence
+      const wlEdges = new THREE.EdgesGeometry(wlGeo);
+      const wlEdgeMat = new THREE.LineBasicMaterial({
+        color: 0x4a8cd6,
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+      });
+      const wlEdgeMesh = new THREE.LineSegments(wlEdges, wlEdgeMat);
+      wlEdgeMesh.rotation.x = -Math.PI / 2;
+      wlEdgeMesh.position.set(0, activeDraft, 0);
+      group.add(wlEdgeMesh);
 
       // Center of Buoyancy (Green)
       const cbGeo = new THREE.SphereGeometry(1.2, 16, 16);
@@ -510,10 +561,10 @@ export default function ThreeViewport({
       cbMarker.position.set(lcbRef.current - halfL, vcbRef.current, 0);
       group.add(cbMarker);
 
-      // Center of Gravity (Coral)
-      const occupantKG = 2.0;
-      const kayakKG = currentParams.hullHeight * 0.6;
-      const cgZ = (180 * occupantKG + 45 * kayakKG) / (180 + 45);
+      // Center of Gravity (Coral, ~7.2" above keel for seated paddler)
+      const paddlerKG = 7.2;
+      const kayakKG = currentParams.hullHeight * 0.45;
+      const cgZ = (180 * paddlerKG + 45 * kayakKG) / (180 + 45);
 
       const cgGeo = new THREE.SphereGeometry(1.2, 16, 16);
       const cgMat = new THREE.MeshBasicMaterial({ color: 0xff7a5c });

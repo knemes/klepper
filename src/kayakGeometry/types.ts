@@ -51,5 +51,6 @@ export interface Hydrostatics {
   waterplaneArea: number;      // square inches
   transverseMetacenterBM: number; // BM in inches
   gm: number;                  // Metacentric Height (GM) in inches
-  stabilityStatus: string;     // Stability descriptor
+  stabilityStatus: string;     // Stability category title
+  stabilityDescription: string;// Detailed description based on Guillemot Kayaks stability analysis
 }

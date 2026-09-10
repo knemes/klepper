@@ -469,18 +469,39 @@ export class KayakBuilder {
 
     const BM = waterplaneMomentOfInertia / (displacementVolume || 1.0);
 
-    // Approximate KG (Center of Gravity)
-    const occupantKG = 2.0;
-    const kayakKG = this.params.hullHeight * 0.6;
-    const CG = (cargoWeightLbs * occupantKG + kayakWeightLbs * kayakKG) / totalWeightLbs;
+    // Realistic Center of Gravity for seated paddler with legs extended forward on hull floor
+    // (Weighted average of torso ~11" and legs/pelvis ~1.5" yields effective combined CG ~7.2" above keel)
+    const paddlerCG = 7.2;
+    const kayakCG = this.params.hullHeight * 0.45;
+    const CG = (cargoWeightLbs * paddlerCG + kayakWeightLbs * kayakCG) / totalWeightLbs;
 
     // GM = KB + BM - KG  (where KB = VCB)
     const GM = vcb + BM - CG;
 
-    let stabilityStatus = "Stable";
-    if (GM < 0.5) stabilityStatus = "Tippy / Poor Initial Stability";
-    else if (GM < 1.5) stabilityStatus = "Moderate / Sporty Initial Stability";
-    else if (GM >= 1.5) stabilityStatus = "Very Stable / High Initial Stability";
+    // 6 Distinct Categories of Kayak Stability (Guillemot Kayaks / Sea Kayaker Standard)
+    // Finely calibrated to the actual hydrostatic GM range across 18" to 36" hulls:
+    let stabilityStatus = "Tier 3: Coastal Touring / Balanced";
+    let stabilityDescription = "Balanced primary stability with strong secondary reserve when heeled on edge.";
+
+    if (GM < 0.6) {
+      stabilityStatus = "Tier 1: Racing / Ultra-Tender";
+      stabilityDescription = "Minimal upright resistance; requires continuous active balance, bracing, and rolling skills.";
+    } else if (GM < 1.8) {
+      stabilityStatus = "Tier 2: Fast Touring / Lively";
+      stabilityDescription = "Low initial resistance with progressive secondary catch; effortless to lean, edge, and carve.";
+    } else if (GM < 3.5) {
+      stabilityStatus = "Tier 3: Coastal Touring / Balanced";
+      stabilityDescription = "Traditional all-around sea kayak stability; comfortable initial feel with dependable edging reserve.";
+    } else if (GM < 5.5) {
+      stabilityStatus = "Tier 4: Stable Touring / Reassuring";
+      stabilityDescription = "High initial stiffness; resists wave tipping and forgives casual weight shifts on coastal waters.";
+    } else if (GM < 8.0) {
+      stabilityStatus = "Tier 5: Recreational / High Initial";
+      stabilityDescription = "Very stiff upright platform; strongly resists initial heel for relaxed calm-water paddling.";
+    } else {
+      stabilityStatus = "Tier 6: Platform / Maximum Stability";
+      stabilityDescription = "Maximum barge-like primary stability; virtually impossible to tip casually, built for heavy payloads.";
+    }
 
     return {
       draft,
@@ -492,7 +513,8 @@ export class KayakBuilder {
       waterplaneArea,
       transverseMetacenterBM: BM,
       gm: GM,
-      stabilityStatus
+      stabilityStatus,
+      stabilityDescription
     };
   }
 
